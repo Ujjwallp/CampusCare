@@ -1,49 +1,81 @@
-# ───────── Dependencies ─────────
+# Dependencies
 node_modules/
 functions/node_modules/
 
-# ───────── Secrets / environment ─────────
-# Never commit API secrets, service-account keys, or env files.
+# Environment files and credentials
 .env
 .env.*
-*.key
-*.pem
+!.env.example
+!.env.*.example
+.runtimeconfig.json
+functions/.runtimeconfig.json
+application_default_credentials.json
 serviceAccount*.json
 service-account*.json
+*-service-account*.json
+firebase-adminsdk-*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
 
-# ───────── Firebase local / debug ─────────
+# Firebase local state, emulators, and logs
 .firebase/
-firebase-debug.log
-firestore-debug.log
-database-debug.log
-ui-debug.log
-*.log
+firebase-debug.log*
+firestore-debug.log*
+database-debug.log*
+ui-debug.log*
+*-debug.log*
+firebase-export-*/
 
-# ───────── OS / editor junk ─────────
+# JavaScript tooling and generated output
+.npm/
+.eslintcache
+.parcel-cache/
+.turbo/
+coverage/
+functions/lib/
+functions/coverage/
+dist/
+build/
+
+# Python development artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+venv/
+.venv/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+run_server_*.py
+
+# macOS
 .DS_Store
 .DS_Store?
 ._*
+.AppleDouble
+.LSOverride
 .Spotlight-V100
 .Trashes
+
+# Windows
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# ───────── IDE / tooling ─────────
+# IDE settings
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
-
-# ───────── Python (local dev server helpers) ─────────
-__pycache__/
-*.pyc
-venv/
-.venv/
-
-# ───────── Build / temp ─────────
-dist/
-build/
-*.tmp
-run_server_*.py

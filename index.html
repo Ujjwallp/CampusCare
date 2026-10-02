@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CampusCare — Campus Service & Grievance Portal for IIIT Guwahati">
+  <meta name="theme-color" content="#262262">
+  <title>CampusCare | IIIT Guwahati</title>
+  <link rel="icon" type="image/svg+xml" href="assets/img/campuscare-mark.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="CampusCare">
+
+  <!-- Warm up connections early so Firebase, fonts, CDNs and uploads are fast -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://api.cloudinary.com" crossorigin>
+  <link rel="dns-prefetch" href="https://res.cloudinary.com">
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link rel="dns-prefetch" href="https://unpkg.com">
+  <link rel="dns-prefetch" href="https://server.arcgisonline.com">
+  <link rel="preload" href="assets/img/iiitg_campus.jpg" as="image">
+  <link rel="preload" href="assets/img/iiitg_logo.png" as="image">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Styles: precompiled Tailwind (fast, no in-browser compile) + custom CSS -->
+  <link rel="stylesheet" href="assets/css/tailwind.css?v=520">
+  <link rel="stylesheet" href="assets/css/style.css?v=520">
+
+  <!-- Theme: apply the saved (or system) theme before first paint to avoid a flash -->
+  <script>
+    (function () {
+      try {
+        var pref = localStorage.getItem('campuscare_theme') || 'system';
+        var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var dark = pref === 'dark' || (pref === 'system' && sysDark);
+        var root = document.documentElement;
+        root.setAttribute('data-theme', dark ? 'dark' : 'light');
+        root.setAttribute('data-theme-pref', pref);
+      } catch (e) {}
+    })();
+  </script>
+
+  <!-- Leaflet: campus map (deferred — only needed when a map is shown) -->
+
+  <!-- Chart.js (deferred — only the admin dashboard uses it) -->
+
+  <!-- Lucide Icons (deferred) -->
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+</head>
+<body class="font-sans antialiased min-h-screen flex flex-col justify-between selection:bg-iiitg-gold/30 selection:text-iiitg-900 bg-slate-50">
+
+  <!-- ═══════════════════ VIEW 1: AUTHENTICATED DASHBOARD ═══════════════════ -->
+  <div id="authenticatedView" class="hidden min-h-screen flex flex-col bg-slate-100/60">
+
+    <!-- ── Top Navigation ── -->
+    <header class="iiitg-navbar text-white sticky top-0 z-40">
+      <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center gap-3">
+
+        <!-- Brand -->
+        <div class="flex items-center gap-2.5 sm:gap-3 shrink-0">
+          <img src="assets/img/campuscare-mark.svg" alt="" class="w-9 h-9 sm:w-10 sm:h-10 drop-shadow">
+          <div class="leading-none">
+            <span class="block text-[15px] sm:text-base font-extrabold tracking-tight">Campus<span class="text-iiitg-gold">Care</span></span>
+            <span id="authBadgeRole" class="block text-[9px] text-slate-300 uppercase font-bold mt-1 tracking-widest">Student Portal</span>
+          </div>
+          <!-- IIITG identity: compact emblem keeps the nav roomy -->
+          <a href="https://www.iiitg.ac.in" target="_blank" rel="noopener" class="hidden sm:flex items-center ml-1 sm:ml-2 pl-2.5 sm:pl-3 border-l border-white/15" title="Indian Institute of Information Technology Guwahati">
+            <span class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white flex items-center justify-center p-1 shrink-0"><img src="assets/img/iiitg_emblem.png" alt="IIIT Guwahati" class="w-full h-full object-contain" onerror="this.onerror=null;this.src='assets/img/iiitg_logo.png'"></span>
+          </a>
+        </div>
+
+        <!-- Section links (desktop / tablet) -->
+        <nav id="topNavLinks" class="hidden md:flex items-center gap-1 ml-4 lg:ml-8 overflow-x-auto no-scrollbar" aria-label="Sections"></nav>
+
+        <div class="flex-1"></div>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-1 sm:gap-1.5">
+          <button id="navNewTicketBtn" onclick="openComplaintModal()" class="hidden items-center gap-1.5 px-3.5 py-2 bg-iiitg-gold hover:bg-amber-400 text-iiitg-900 text-xs font-extrabold rounded-xl transition-colors btn-press mr-1">
+            <i data-lucide="plus" class="w-4 h-4"></i><span class="hidden lg:inline">Report Issue</span><span class="lg:hidden">New</span>
+          </button>
+
+          <button id="navMessagesBtn" onclick="openMessagesDrawer()" class="nav-icon-btn lg:!w-auto lg:px-3 lg:gap-2 relative" aria-label="Messages" title="Messages">
+            <i data-lucide="message-square-text" class="w-5 h-5"></i><span class="hidden lg:inline text-[13px] font-bold">Messages</span>
+            <span id="navMessagesBadge" class="hidden absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center ring-2 ring-[#262262]">0</span>
+          </button>
+
+          <button id="themeToggleBtn" onclick="cycleTheme()" class="nav-icon-btn" aria-label="Switch theme" title="Theme: Auto">
+            <i data-lucide="monitor" class="w-5 h-5"></i>
+          </button>
+
+          <button onclick="openEmergencyModal()" class="nav-icon-btn text-rose-300 hover:text-rose-200" aria-label="Emergency contacts" title="Emergency contacts">
+            <i data-lucide="siren" class="w-5 h-5"></i>
+          </button>
+
+          <!-- Profile -->
+          <div class="relative ml-1">
+            <button id="clerkUserButton" onclick="toggleClerkMenu()"
+              class="w-9 h-9 rounded-full bg-gradient-to-tr from-iiitg-gold to-amber-300 text-iiitg-900 font-extrabold text-xs flex items-center justify-center ring-2 ring-white/20 hover:ring-iiitg-gold/60 transition-all btn-press"
+              aria-label="Account menu" aria-haspopup="true">UP</button>
+
+            <div id="clerkMenuDropdown" class="hidden absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 text-sm text-slate-700 z-50" role="menu">
+              <div class="px-4 py-3 border-b border-slate-100">
+                <span class="font-bold text-slate-900 block truncate" id="clerkMenuName">User</span>
+                <span class="text-slate-500 text-xs block truncate font-mono mt-0.5" id="clerkMenuEmail"></span>
+                <span id="authUserDisplay" class="hidden"></span>
+              </div>
+              <a href="#" id="menuProfile" onclick="openProfileModal(false); return false;" class="hidden menu-item" role="menuitem">
+                <i data-lucide="user-round" class="w-4 h-4 text-slate-400"></i><span>My profile</span>
+              </a>
+              <a href="#" id="menuNotifications" onclick="enableNotifications(); return false;" class="hidden menu-item" role="menuitem">
+                <i data-lucide="bell" class="w-4 h-4 text-slate-400"></i><span>Turn on notifications</span>
+              </a>
+              <a href="#" id="menuInstallApp" onclick="installApp(); return false;" class="menu-item" role="menuitem">
+                <i data-lucide="smartphone" class="w-4 h-4 text-slate-400"></i><span>Install app on this device</span>
+              </a>
+              <a href="#" id="menuUpdatePhoto" onclick="hideEl('clerkMenuDropdown'); showModal('staffProfileUpdateModal'); return false;" class="hidden menu-item" role="menuitem">
+                <i data-lucide="image" class="w-4 h-4 text-slate-400"></i><span>Update Profile Photo</span>
+              </a>
+              <a href="#" onclick="hideEl('clerkMenuDropdown'); openPasswordChange(false); return false;" class="menu-item" role="menuitem">
+                <i data-lucide="key-round" class="w-4 h-4 text-slate-400"></i><span>Change Password</span>
+              </a>
+              <div class="border-t border-slate-100 my-1.5"></div>
+              <button onclick="handleLogout()" class="menu-item w-full text-rose-600 font-bold hover:!bg-rose-50" role="menuitem">
+                <i data-lucide="log-out" class="w-4 h-4"></i><span>Sign Out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── Page Body ── -->
+    <main class="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-5 sm:pt-8 pb-28 md:pb-10 space-y-5 sm:space-y-6">
+      <div id="noticeBanner" class="hidden space-y-2" aria-live="polite"></div>
+
+      <!-- ================= STUDENT ================= -->
+      <div id="studentDashboardContent" class="space-y-5">
+        <div class="flex items-end justify-between gap-3">
+          <div>
+            <h1 id="studentPageTitle" class="page-title">My Tickets</h1>
+            <p id="studentPageSub" class="page-sub">Track the live status of issues you've reported.</p>
+          </div>
+          <button onclick="openComplaintModal()" class="hidden sm:inline-flex md:hidden items-center gap-2 px-4 py-2.5 bg-iiitg-800 text-white text-sm font-bold rounded-xl shadow-md btn-press">
+            <i data-lucide="plus" class="w-4 h-4 text-iiitg-gold"></i> Report Issue
+          </button>
+        </div>
+
+        <!-- Search & Filter -->
+        <div class="flex flex-col sm:flex-row gap-2.5">
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            <input type="text" id="ticketSearchFilter" oninput="debouncedFilterStudentTickets()" placeholder="Search by ID, issue or location..." class="w-full pl-10 pr-4 py-3 text-sm bg-white border border-slate-200 rounded-xl shadow-sm focus:outline-none input-enhanced" aria-label="Search tickets">
+          </div>
+          <select id="statusFilter" onchange="filterStudentTickets()" class="px-3.5 py-3 text-sm bg-white border border-slate-200 rounded-xl shadow-sm input-enhanced cursor-pointer sm:w-48" aria-label="Filter by status">
+            <option value="ALL">All statuses</option>
+            <option value="Pending">Waiting</option>
+            <option value="In Progress">Being fixed</option>
+            <option value="Resolved">Fixed</option>
+          </select>
+        </div>
+
+        <div id="studentTicketsContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4" aria-live="polite"></div>
+      </div>
+
+      <!-- ================= STAFF ================= -->
+      <div id="staffDashboardContent" class="hidden space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <h1 class="page-title">Work Desk</h1>
+            <p id="staffPageSub" class="page-sub">Tickets waiting for someone to pick them up.</p>
+          </div>
+          <button id="staffStatusToggleBtn" onclick="toggleStaffStatus()" class="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 text-sm font-bold">On Duty</button>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2.5 sm:gap-4">
+          <button onclick="switchStaffTab('Pending')" class="stat-card text-left">
+            <span class="stat-label text-slate-500">New</span>
+            <span class="stat-value text-slate-800" id="staffStatPending">0</span>
+          </button>
+          <button onclick="switchStaffTab('In Progress')" class="stat-card text-left">
+            <span class="stat-label text-blue-600">Working on</span>
+            <span class="stat-value text-blue-700" id="staffStatActive">0</span>
+          </button>
+          <button onclick="switchStaffTab('Resolved')" class="stat-card text-left">
+            <span class="stat-label text-emerald-600">Done</span>
+            <span class="stat-value text-emerald-700" id="staffStatResolved">0</span>
+          </button>
+        </div>
+
+        <!-- Work you've completed, over time -->
+        <div id="staffCompletedPanel" class="panel p-3 sm:p-4 hidden">
+          <div class="flex items-center gap-2 mb-2.5">
+            <i data-lucide="award" class="w-4 h-4 text-emerald-600"></i>
+            <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-500">Work you've completed</h3>
+          </div>
+          <div id="staffCompletedStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"></div>
+        </div>
+
+        <div id="staffTicketsContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4" aria-live="polite"></div>
+      </div>
+
+      <!-- ================= ADMIN ================= -->
+      <div id="adminDashboardContent" class="hidden space-y-5">
+        <div>
+          <h1 id="adminPageTitle" class="page-title">Dashboard</h1>
+          <p id="adminPageSub" class="page-sub">Campus-wide grievance metrics at a glance.</p>
+        </div>
+
+        <!-- KPIs -->
+        <div id="adminKpis" class="grid grid-cols-3 gap-2.5 sm:gap-4">
+          <button class="stat-card text-left border-l-4 !border-l-emerald-500" onclick="switchAdminTab('Workload')">
+            <span class="stat-label text-emerald-600">On Duty</span>
+            <span class="stat-value text-emerald-700" id="adminStatOnDuty">0</span>
+          </button>
+          <button class="stat-card text-left border-l-4 !border-l-rose-500" onclick="switchAdminTab('Triage', 'overdue')">
+            <span class="stat-label text-rose-600">Late</span>
+            <span class="stat-value text-rose-700" id="adminStatOverdue">0</span>
+          </button>
+          <button class="stat-card text-left border-l-4 !border-l-blue-500" onclick="switchAdminTab('Triage', 'unassigned')">
+            <span class="stat-label text-blue-600">Not assigned</span>
+            <span class="stat-value text-blue-700" id="adminStatUnassigned">0</span>
+          </button>
+        </div>
+
+        <!-- Overview -->
+        <div id="adminViewAnalytics" class="space-y-4 sm:space-y-6">
+          <!-- Work report -->
+          <section class="panel p-4 sm:p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 class="text-base font-extrabold text-slate-900">Work report</h3>
+                <p id="repRangeLabel" class="text-xs text-slate-500 mt-0.5"></p>
+              </div>
+              <div id="reportPeriodBtns" class="inline-flex p-1 bg-slate-100 rounded-xl self-start" role="tablist" aria-label="Report period">
+                <button class="period-btn" data-period="day" onclick="setReportPeriod('day')">Today</button>
+                <button class="period-btn" data-period="week" onclick="setReportPeriod('week')">Week</button>
+                <button class="period-btn" data-period="month" onclick="setReportPeriod('month')">Month</button>
+                <button class="period-btn" data-period="year" onclick="setReportPeriod('year')">Year</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-5">
+              <div class="rounded-xl bg-slate-50 border border-slate-200 p-3">
+                <span class="stat-label text-slate-500">Reported</span>
+                <span id="repFiled" class="block stat-value text-slate-800">0</span>
+              </div>
+              <div class="rounded-xl bg-emerald-50 border border-emerald-200 p-3">
+                <span class="stat-label text-emerald-700">Fixed</span>
+                <span id="repCompleted" class="block stat-value text-emerald-700">0</span>
+              </div>
+              <div class="rounded-xl bg-blue-50 border border-blue-200 p-3">
+                <span class="stat-label text-blue-700">Fixed %</span>
+                <span id="repRate" class="block stat-value text-blue-700">–</span>
+              </div>
+              <div class="rounded-xl bg-amber-50 border border-amber-200 p-3">
+                <span class="stat-label text-amber-700">Avg. time to fix</span>
+                <span id="repAvg" class="block stat-value text-amber-700">–</span>
+              </div>
+            </div>
+            <h4 id="repChartTitle" class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Filed vs completed</h4>
+            <div class="w-full h-56 sm:h-72"><canvas id="trendChart"></canvas></div>
+          </section>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <section class="panel p-4 sm:p-5">
+              <h3 class="text-sm font-bold text-slate-800 mb-1">Fixed by each technician</h3>
+              <p id="repTechSub" class="text-xs text-slate-500 mb-4"></p>
+              <div id="repTechList" class="space-y-3"></div>
+            </section>
+            <section class="panel p-4 sm:p-5">
+              <h3 class="text-sm font-bold text-slate-800 mb-1">Problems by type</h3>
+              <p id="repCatSub" class="text-xs text-slate-500 mb-4"></p>
+              <div class="w-full h-56 sm:h-64 flex justify-center"><canvas id="categoryChart"></canvas></div>
+            </section>
+          </div>
+
+          <!-- Hot-spots: places with the most reports -->
+          <section class="panel p-4 sm:p-5">
+            <h3 class="text-sm font-bold text-slate-800 mb-1">Hot-spots — places with the most reports</h3>
+            <p id="repHotspotsSub" class="text-xs text-slate-500 mb-4">Where problems cluster, so repairs can be planned. Confidential reports are not shown here.</p>
+            <div id="repHotspots" class="space-y-3"></div>
+          </section>
+        </div>
+
+        <!-- Triage -->
+        <div id="adminViewTriage" class="hidden space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div id="triageFilterBar" class="flex-1 min-w-0 flex gap-1.5 overflow-x-auto no-scrollbar"></div>
+            <div class="inline-flex p-1 bg-slate-200/70 rounded-xl self-start shrink-0" role="tablist" aria-label="View">
+              <button class="period-btn tickets-view-btn active" data-view="list" onclick="setTicketsView('list')"><i data-lucide="list" class="w-3.5 h-3.5 inline -mt-0.5"></i> List</button>
+              <button class="period-btn tickets-view-btn" data-view="map" onclick="setTicketsView('map')"><i data-lucide="map" class="w-3.5 h-3.5 inline -mt-0.5"></i> Map</button>
+            </div>
+            <button id="autoAssignAllBtn" onclick="autoAssignAll(this)" class="hidden shrink-0 self-start px-3.5 py-2 text-xs font-bold text-white bg-iiitg-800 hover:bg-iiitg-900 rounded-xl items-center gap-1.5 btn-press" title="Give every waiting ticket to the best available technician"><i data-lucide="sparkles" class="w-4 h-4 text-iiitg-gold"></i> Auto-assign waiting</button>
+          </div>
+          <div id="triageMapPanel" class="hidden panel p-2 sm:p-3 space-y-2">
+            <div class="flex justify-end px-1">
+              <button id="heatToggleBtn" class="period-btn active" onclick="toggleHeatmap()"><i data-lucide="flame" class="w-3.5 h-3.5 inline -mt-0.5"></i> Heatmap</button>
+            </div>
+            <div id="adminTicketMap" class="w-full h-[60vh] min-h-[360px] rounded-xl overflow-hidden bg-slate-100"></div>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[11px] font-semibold text-slate-600">
+              <span id="adminMapNote"></span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-600"></span>Urgent</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Not assigned</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-violet-600"></span>Not started</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>Being fixed</span>
+            </div>
+          </div>
+          <div id="triageListPanel" class="panel overflow-hidden">
+            <div class="hidden md:grid grid-cols-[140px_1fr_170px_230px] gap-4 px-5 py-3 bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span>Ticket</span><span>Problem</span><span>Who's on it</span><span class="text-right">Actions</span>
+            </div>
+            <div id="adminTriageTableBody" class="divide-y divide-slate-100" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <!-- Technicians -->
+        <div id="adminViewWorkload" class="hidden space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p id="techRangeLabel" class="text-sm text-slate-500"></p>
+            <div class="inline-flex p-1 bg-slate-200/70 rounded-xl self-start" role="tablist" aria-label="Technician stats period">
+              <button class="period-btn tech-period" data-period="week" onclick="setTechPeriod('week')">Week</button>
+              <button class="period-btn tech-period" data-period="month" onclick="setTechPeriod('month')">Month</button>
+              <button class="period-btn tech-period" data-period="year" onclick="setTechPeriod('year')">Year</button>
+              <button class="period-btn tech-period" data-period="all" onclick="setTechPeriod('all')">All time</button>
+            </div>
+          </div>
+          <div id="techSummaryBar" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5"></div>
+          <div id="techCards" class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4"></div>
+        </div>
+
+        <!-- Reports -->
+        <div id="adminViewReports" class="hidden space-y-4">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 no-print">
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="inline-flex p-1 bg-slate-200/70 rounded-xl">
+                <button class="period-btn rep-range-btn" data-kind="today" onclick="setReportRange('today')">Today</button>
+                <button class="period-btn rep-range-btn active" data-kind="this" onclick="setReportRange('this')">This month</button>
+                <button class="period-btn rep-range-btn" data-kind="last" onclick="setReportRange('last')">Last month</button>
+                <button class="period-btn rep-range-btn" data-kind="year" onclick="setReportRange('year')">This year</button>
+              </div>
+              <label class="flex items-center gap-1.5 text-xs font-semibold text-slate-600">any day
+                <input id="repDate" type="date" onchange="setReportRange('date')" class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
+              </label>
+              <label class="flex items-center gap-1.5 text-xs font-semibold text-slate-600">or month
+                <input id="repMonth" type="month" onchange="setReportRange('month')" class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
+              </label>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="downloadReportExcel(this)" class="px-4 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center gap-2 btn-press"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel</button>
+              <button onclick="printReport()" class="px-4 py-2.5 text-sm font-bold text-white bg-iiitg-800 hover:bg-iiitg-900 rounded-xl flex items-center gap-2 btn-press"><i data-lucide="file-text" class="w-4 h-4"></i> PDF / Print</button>
+            </div>
+          </div>
+          <div id="reportPrintArea" class="space-y-4">
+            <div class="print-only hidden items-center gap-3 pb-3 border-b border-slate-300">
+              <img src="assets/img/iiitg_logo.png" alt="IIIT Guwahati" class="h-8">
+            </div>
+            <h2 id="reportTitle" class="text-lg font-extrabold text-slate-900"></h2>
+            <div id="reportBody" class="space-y-4"></div>
+          </div>
+        </div>
+
+        <!-- Manage Staff -->
+        <div id="adminViewUsers" class="hidden space-y-4">
+          <div class="inline-flex p-1 bg-slate-200/70 rounded-xl" role="tablist" aria-label="Manage">
+            <button class="period-btn manage-tab active" data-panel="staff" onclick="setManagePanel('staff')"><i data-lucide="users" class="w-3.5 h-3.5 inline -mt-0.5"></i> Staff accounts</button>
+            <button class="period-btn manage-tab" data-panel="notices" onclick="setManagePanel('notices')"><i data-lucide="megaphone" class="w-3.5 h-3.5 inline -mt-0.5"></i> Notices</button>
+            <button class="period-btn manage-tab" data-panel="settings" onclick="setManagePanel('settings')"><i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 inline -mt-0.5"></i> Settings</button>
+            <button class="period-btn manage-tab" data-panel="activity" onclick="setManagePanel('activity')"><i data-lucide="history" class="w-3.5 h-3.5 inline -mt-0.5"></i> Activity log</button>
+          </div>
+          <div id="managePanel-staff" class="space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <label class="sr-only" for="staffViewSelect">Show staff</label>
+              <select id="staffViewSelect" class="staff-view-select" onchange="setStaffView(this.value)" aria-label="Choose which staff to show">
+                <option value="technicians">🔧 Technicians — fix problems</option>
+                <option value="members">🧑‍💼 Non-teaching staff — campus users who report issues</option>
+              </select>
+              <span id="staffViewCount" class="text-xs font-bold text-slate-400 whitespace-nowrap"></span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button onclick="syncStaffPhoneLogins(this)" class="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-xl flex items-center gap-1.5 transition-colors border border-slate-200 btn-press" title="Make sure every staff member can sign in with their phone number">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i><span class="hidden sm:inline">Sync phone logins</span>
+              </button>
+              <button onclick="openAddStaffModal()" class="px-4 py-2.5 bg-iiitg-800 hover:bg-iiitg-900 text-white text-sm font-bold rounded-xl flex items-center gap-2 transition-colors shadow-sm btn-press">
+                <i data-lucide="user-plus" class="w-4 h-4"></i><span>Add Staff</span>
+              </button>
+            </div>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 hidden" id="adminApprovalsContainer">
+            <h4 class="text-sm font-bold text-amber-900 mb-3 flex items-center gap-2"><i data-lucide="shield-alert" class="w-4 h-4"></i> New profile photos to approve</h4>
+            <div id="adminApprovalsList" class="space-y-2.5"></div>
+          </div>
+
+          <div id="staffView-technicians" class="space-y-3">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i data-lucide="wrench" class="w-3.5 h-3.5"></i> Technicians <span class="text-slate-400 font-bold normal-case tracking-normal">· fix reported problems</span></h4>
+            <div class="panel overflow-hidden">
+              <div class="hidden lg:grid grid-cols-[1.3fr_1fr_1.4fr_auto] gap-4 px-5 py-3 bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <span>Technician</span><span>Team</span><span>Login & contact</span><span class="text-right w-[330px]">Actions</span>
+              </div>
+              <div id="adminUsersTableBody" class="divide-y divide-slate-100" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <div id="staffView-members" class="space-y-3 hidden">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i data-lucide="id-card" class="w-3.5 h-3.5"></i> Non-teaching staff <span class="text-slate-400 font-bold normal-case tracking-normal">· listed here and automatically registered as campus users who can report problems</span></h4>
+            <div class="panel overflow-hidden">
+              <div class="hidden lg:grid grid-cols-[1.3fr_1fr_1.4fr_auto] gap-4 px-5 py-3 bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <span>Member</span><span>Section / Office</span><span>Login & contact</span><span class="text-right w-[220px]">Actions</span>
+              </div>
+              <div id="adminMembersTableBody" class="divide-y divide-slate-100" aria-live="polite"></div>
+            </div>
+          </div>
+          </div>
+
+          <!-- Notices -->
+          <div id="managePanel-notices" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <form onsubmit="submitNotice(event)" class="panel p-4 sm:p-5 space-y-3 text-xs">
+              <h3 class="text-sm font-extrabold text-slate-900">Post a campus notice</h3>
+              <p class="text-[11px] text-slate-500">Everyone sees it at the top of CampusCare, and inside the report form when they're about to report the same thing. That prevents duplicate tickets.</p>
+              <div><label class="form-label" for="noticeTitle">Title *</label><input id="noticeTitle" required maxlength="90" placeholder="e.g. Wi-Fi down in Hostel 3" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"></div>
+              <div><label class="form-label" for="noticeBody">Details</label><textarea id="noticeBody" rows="3" placeholder="e.g. Fibre cut near the gate. Expected fix by 5 PM. No need to report it again." class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm resize-none"></textarea></div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="form-label" for="noticeLevel">Type</label><select id="noticeLevel" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"><option value="outage">Outage / known problem</option><option value="warning">Planned work</option><option value="info">Information</option></select></div>
+                <div><label class="form-label" for="noticeHours">Show for</label><select id="noticeHours" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"><option value="4">4 hours</option><option value="12">12 hours</option><option value="24" selected>1 day</option><option value="72">3 days</option><option value="168">1 week</option></select></div>
+                <div><label class="form-label" for="noticeCategory">Problem type</label><select id="noticeCategory" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"></select></div>
+                <div><label class="form-label" for="noticeZone">Place</label><input id="noticeZone" list="noticePlaceSuggestions" placeholder="Leave empty for whole campus" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"><datalist id="noticePlaceSuggestions"></datalist></div>
+              </div>
+              <button type="submit" class="w-full py-2.5 bg-iiitg-800 hover:bg-iiitg-900 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2"><i data-lucide="megaphone" class="w-4 h-4"></i> Post notice</button>
+            </form>
+            <section class="panel p-4 sm:p-5">
+              <h3 class="text-sm font-extrabold text-slate-900 mb-3">Active notices</h3>
+              <div id="adminNoticeList" class="space-y-2"></div>
+            </section>
+          </div>
+
+          <!-- Settings -->
+          <form id="managePanel-settings" onsubmit="submitSettings(event)" class="hidden panel p-4 sm:p-5 space-y-4 max-w-xl text-xs">
+            <h3 class="text-sm font-extrabold text-slate-900">Rules</h3>
+            <div>
+              <label class="form-label" for="setMeToo">"Me too" count that makes a shared issue urgent</label>
+              <input id="setMeToo" type="number" min="2" max="100" class="w-28 px-3 py-2.5 rounded-xl border border-slate-300 text-sm">
+              <p class="text-[11px] text-slate-500 mt-1">When this many people report the same problem, it is marked urgent and goes to the fastest available technician.</p>
+            </div>
+            <div>
+              <label class="form-label" for="setLate">A ticket is "late" after</label>
+              <select id="setLate" class="w-40 px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"><option value="12">12 hours</option><option value="24">1 day</option><option value="48">2 days</option><option value="72">3 days</option><option value="168">1 week</option></select>
+            </div>
+            <label class="flex items-start gap-2.5 cursor-pointer">
+              <input id="setAutoAssign" type="checkbox" class="w-4 h-4 mt-0.5 accent-iiitg-800">
+              <span><strong class="text-slate-800">Automatically give new tickets to a technician</strong><br><span class="text-[11px] text-slate-500">Turn off if you want to assign every ticket yourself.</span></span>
+            </label>
+            <button type="submit" class="px-5 py-2.5 bg-iiitg-800 hover:bg-iiitg-900 text-white font-bold rounded-xl text-sm">Save rules</button>
+          </form>
+
+          <div id="managePanel-activity" class="hidden panel p-4 sm:p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-extrabold text-slate-900">Activity log</h3>
+              <span class="text-[11px] text-slate-400">Who did what, most recent first</span>
+            </div>
+            <div id="auditLogList" class="divide-y divide-slate-100 max-h-[460px] overflow-y-auto"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Mobile: floating "Report issue" for students -->
+    <button id="mobileNewTicketFab" onclick="openComplaintModal()" class="hidden fixed right-4 bottom-[84px] z-40 w-14 h-14 rounded-2xl bg-iiitg-gold text-iiitg-900 shadow-xl shadow-iiitg-900/25 flex items-center justify-center btn-press" aria-label="Report new issue">
+      <i data-lucide="plus" class="w-7 h-7"></i>
+    </button>
+
+    <!-- Mobile bottom tab bar -->
+    <nav id="bottomNav" class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200 pb-[env(safe-area-inset-bottom)]" aria-label="Sections">
+      <div id="bottomNavInner" class="flex items-stretch justify-around h-16"></div>
+    </nav>
+  </div>
+
+  <!-- ═══════════════════ MESSAGES DRAWER ═══════════════════ -->
+  <div id="messagesDrawer" class="hidden fixed inset-0 z-[75]" role="dialog" aria-modal="true" aria-labelledby="msgDrawerTitle">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="closeMessagesDrawer()"></div>
+    <aside class="drawer-panel absolute right-0 top-0 h-full w-full sm:w-[440px] bg-white shadow-2xl flex flex-col">
+      <div class="h-16 px-4 flex items-center gap-2 border-b border-slate-200 shrink-0">
+        <button id="msgBackBtn" onclick="showThreadList()" class="hidden p-2 -ml-1 rounded-xl text-slate-500 hover:bg-slate-100" aria-label="Back"><i data-lucide="arrow-left" class="w-5 h-5"></i></button>
+        <div class="flex-1 min-w-0">
+          <h2 id="msgDrawerTitle" class="font-extrabold text-slate-900 truncate">Messages</h2>
+          <p id="msgDrawerSub" class="text-[11px] text-slate-500 truncate"></p>
+        </div>
+        <button id="msgComposeBtn" onclick="showCompose()" class="hidden px-3 py-2 text-xs font-bold text-white bg-iiitg-800 hover:bg-iiitg-900 rounded-xl items-center gap-1.5"><i data-lucide="pen-square" class="w-4 h-4"></i> <span id="msgComposeLabel">New</span></button>
+        <button onclick="closeMessagesDrawer()" class="p-2 rounded-xl text-slate-500 hover:bg-slate-100" aria-label="Close"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Thread list -->
+      <div id="msgListView" class="flex-1 flex flex-col min-h-0">
+        <div id="msgFilters" class="hidden px-4 py-2.5 border-b border-slate-100 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0"></div>
+        <div id="msgThreadList" class="flex-1 overflow-y-auto"></div>
+      </div>
+
+      <!-- Single thread -->
+      <div id="msgThreadView" class="hidden flex-1 flex flex-col min-h-0">
+        <div id="msgThreadBody" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50"></div>
+        <form onsubmit="sendThreadReply(event)" class="p-3 border-t border-slate-200 flex gap-2 shrink-0 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <input type="file" id="msgFileInput" accept="image/*,video/*" class="hidden" onchange="sendThreadFile(event)">
+          <button type="button" id="msgAttachBtn" onclick="document.getElementById('msgFileInput').click()" class="hidden px-3 text-slate-500 hover:text-iiitg-800 hover:bg-slate-100 rounded-xl" aria-label="Attach photo"><i data-lucide="paperclip" class="w-5 h-5"></i></button>
+          <input id="msgReplyInput" type="text" required autocomplete="off" placeholder="Write a reply..." class="flex-1 px-4 py-3 text-sm border border-slate-300 rounded-xl input-enhanced focus:outline-none">
+          <button type="submit" class="px-4 bg-iiitg-800 hover:bg-iiitg-900 text-white rounded-xl btn-press" aria-label="Send"><i data-lucide="send" class="w-4 h-4"></i></button>
+        </form>
+      </div>
+
+      <!-- Compose (students / staff) -->
+      <form id="msgComposeView" onsubmit="handleContactAdmin(event)" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
+        <p id="composeHelp" class="text-xs text-slate-500 leading-relaxed">Message the Administrator to escalate an unresolved issue, report a problem with service, or ask for help.</p>
+        <div id="composeRecipientContainer" class="hidden">
+          <label class="form-label" for="composeRecipient">To *</label>
+          <select id="composeRecipient" class="w-full px-3 py-3 rounded-xl border border-slate-300 text-sm bg-white"></select>
+        </div>
+        <div id="contactAdminTicketContainer" class="hidden">
+          <label class="form-label" for="adminMessageTicketId">Related ticket *</label>
+          <select id="adminMessageTicketId" class="w-full px-3 py-3 rounded-xl border border-slate-300 text-sm bg-white"></select>
+        </div>
+        <div class="flex-1 flex flex-col">
+          <label class="form-label" for="adminMessageInput">Message *</label>
+          <textarea id="adminMessageInput" required rows="6" placeholder="Type your message..." class="w-full flex-1 min-h-[140px] px-3.5 py-3 rounded-xl border border-slate-300 text-sm resize-none input-enhanced focus:outline-none"></textarea>
+        </div>
+        <button type="submit" class="w-full py-3 bg-iiitg-800 hover:bg-iiitg-900 text-white font-bold rounded-xl text-sm transition-colors shadow-sm flex items-center justify-center gap-2 btn-press"><i data-lucide="send" class="w-4 h-4"></i> <span id="composeSendLabel">Send to Admin</span></button>
+      </form>
+    </aside>
+  </div>
+
+  <!-- ═══════════════════ VIEW 2: LOGIN LANDING PAGE ═══════════════════ -->
+  <div id="loginView" class="min-h-screen flex flex-col justify-between campus-hero-bg">
+
+    <!-- Institute accent strip -->
+    <div class="h-1.5 w-full bg-gradient-to-r from-iiitg-900 via-iiitg-gold to-iiitg-900"></div>
+
+    <!-- Header: institute first, like the official university site -->
+    <header class="bg-white border-b border-slate-200 shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
+
+        <!-- Left: IIIT Guwahati identity -->
+        <a href="https://www.iiitg.ac.in" target="_blank" rel="noopener" class="flex items-center gap-3 min-w-0 group">
+          <img src="assets/img/iiitg_logo.png" alt="IIIT Guwahati"
+               class="h-11 sm:h-14 w-auto object-contain shrink-0"
+               onerror="this.onerror=null; this.src='https://www.iiitg.ac.in/uploads/2023/08/01/7cb707d8dc0de4a798b10636d76db56c.png';">
+          <div class="min-w-0 hidden sm:block">
+            <span class="block text-sm sm:text-base font-extrabold text-iiitg-900 leading-tight tracking-tight truncate">Indian Institute of Information Technology Guwahati</span>
+            <span class="block text-[11px] font-semibold text-slate-500 leading-tight">भारतीय सूचना प्रौद्योगिकी संस्थान गुवाहाटी · Bongora, Assam</span>
+          </div>
+        </a>
+
+        <!-- Right: CampusCare portal mark -->
+        <div class="flex items-center gap-2.5 shrink-0 pl-3 border-l border-slate-200">
+          <img src="assets/img/campuscare-mark.svg" alt="" class="w-9 h-9 sm:w-10 sm:h-10">
+          <div class="text-right hidden sm:block">
+            <span class="block text-sm sm:text-base font-extrabold text-iiitg-900 tracking-tight leading-none">Campus<span class="text-[#b8932a]">Care</span></span>
+            <span class="block text-[9px] sm:text-[10px] font-bold text-iiitg-700 uppercase tracking-wider mt-0.5">Grievance &amp; Service Portal</span>
+          </div>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- Hero Content -->
+    <main class="flex-1 flex items-center py-8 lg:py-12 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center">
+
+        <!-- Left: Hero Text -->
+        <div class="hero-content-left lg:col-span-6 space-y-5 text-center lg:text-left text-white opacity-0">
+
+          <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-slate-200 text-xs font-semibold">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Official Campus Grievance &amp; Service Portal
+          </div>
+
+          <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.15] drop-shadow-lg">
+            A better campus,
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-iiitg-gold via-amber-300 to-iiitg-gold">together.</span>
+          </h1>
+
+          <p class="text-sm sm:text-base text-slate-300 font-normal leading-relaxed max-w-xl mx-auto lg:mx-0">
+            Report any problem on campus — hostel, academic, Wi-Fi, water, electrical and more — and watch it get resolved. Built for every member of IIIT Guwahati: students, faculty and staff.
+          </p>
+
+          <!-- Helpline Strip -->
+          <div class="pt-4 border-t border-white/15">
+            <div class="flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-2 text-xs text-slate-300">
+              <span class="font-bold uppercase tracking-wider text-[10px] text-iiitg-gold">Campus Duty Desk:</span>
+              <span class="flex items-center gap-1.5">
+                <i data-lucide="shield" class="w-3.5 h-3.5 text-slate-400"></i>
+                Security: <strong class="text-white font-mono ml-1">0361-2630010</strong>
+              </span>
+              <span class="flex items-center gap-1.5">
+                <i data-lucide="heart-pulse" class="w-3.5 h-3.5 text-rose-400"></i>
+                Medical: <strong class="text-white font-mono ml-1">0361-2630015</strong>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Login Card -->
+        <div class="hero-content-right lg:col-span-6 max-w-md mx-auto w-full opacity-0">
+          <div class="glass-login-card rounded-2xl shadow-2xl shadow-black/20 overflow-hidden">
+
+            <!-- Role Tabs -->
+            <div class="bg-slate-100/90 p-1.5 border-b border-slate-200 grid grid-cols-3 gap-1 text-center">
+              <button id="tab-student" onclick="setRole('student')" class="py-2.5 rounded-xl bg-white text-iiitg-900 shadow-sm transition-all flex items-center justify-center gap-1.5 text-xs font-bold tab-active">
+                <i data-lucide="graduation-cap" class="w-3.5 h-3.5"></i>
+                <span>Campus User</span>
+              </button>
+              <button id="tab-staff" onclick="setRole('staff')" class="py-2.5 rounded-xl text-slate-500 hover:text-slate-800 transition-all flex items-center justify-center gap-1.5 text-xs font-semibold">
+                <i data-lucide="wrench" class="w-3.5 h-3.5"></i>
+                <span>Staff</span>
+              </button>
+              <button id="tab-admin" onclick="setRole('admin')" class="py-2.5 rounded-xl text-slate-500 hover:text-slate-800 transition-all flex items-center justify-center gap-1.5 text-xs font-semibold">
+                <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+                <span>Admin</span>
+              </button>
+            </div>
+
+            <!-- Clerk SignIn Card -->
+            <div class="p-6 sm:p-7 space-y-4">
+
+              <!-- Card Header -->
+              <div class="text-center pb-1">
+                <img src="assets/img/campuscare-mark.svg" alt="" class="w-12 h-12 mx-auto mb-2.5">
+                <h2 id="loginHeading" class="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">Sign in to CampusCare</h2>
+                <p id="loginSubheading" class="text-xs text-slate-500 mt-1">Welcome back! Please sign in to continue</p>
+              </div>
+
+              <!-- Campus user type (Campus User tab only) -->
+              <div id="campusTypeWrap" class="pt-1">
+                <label for="campusTypeSelect" class="block text-xs font-bold text-slate-700 uppercase mb-1.5">I am a</label>
+                <select id="campusTypeSelect" onchange="setCampusType(this.value)" class="login-select w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm input-enhanced cursor-pointer bg-white font-semibold text-slate-800">
+                  <option value="student">Student</option>
+                  <option value="faculty">Faculty / Teaching staff</option>
+                  <option value="nonteaching">Non-teaching staff</option>
+                </select>
+              </div>
+
+              <!-- Google SSO -->
+              <div id="googleSsoContainer" class="pt-1">
+                <button
+                  type="button"
+                  id="googleSsoBtn" onclick="handleGoogleLogin()"
+                  class="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl border border-slate-300 shadow-sm hover:shadow transition-all text-xs sm:text-sm flex items-center justify-center gap-2.5 btn-press"
+                >
+                  <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.14z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.36 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                  </svg>
+                  <span id="googleBtnText">Continue with Google (@iiitg.ac.in)</span>
+                </button>
+
+                <div class="relative flex py-3.5 items-center">
+                  <div class="flex-grow border-t border-slate-200"></div>
+                  <span class="flex-shrink mx-3 text-[10px] text-slate-400 font-bold uppercase tracking-wider">or</span>
+                  <div class="flex-grow border-t border-slate-200"></div>
+                </div>
+              </div>
+
+              <!-- Credential Form -->
+              <form id="standardLoginForm" onsubmit="handleLogin(event)" class="space-y-3.5">
+
+                <!-- Identifier -->
+                <div>
+                  <label id="identifierLabel" for="userIdentifier" class="block text-xs font-bold text-slate-700 uppercase mb-1.5">Roll No / IIITG Email</label>
+                  <input
+                    type="text"
+                    id="userIdentifier"
+                    required
+                    placeholder="e.g. 2301045 or user@iiitg.ac.in"
+                    autocomplete="username"
+                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm input-enhanced"
+                  >
+                </div>
+
+                <!-- Password -->
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <label for="userPassword" class="block text-xs font-bold text-slate-700 uppercase">Password</label>
+                    <button type="button" onclick="openResetPasswordModal()" class="text-[11px] font-semibold text-iiitg-700 hover:text-iiitg-900 hover:underline cursor-pointer transition-colors">Reset password?</button>
+                  </div>
+                  <div class="relative">
+                    <input
+                      type="password"
+                      id="userPassword"
+                      required
+                      placeholder="••••••••"
+                      autocomplete="current-password"
+                      class="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm input-enhanced"
+                    >
+                    <button
+                      type="button"
+                      onclick="togglePasswordVisibility('userPassword', 'pwdEyeIcon')"
+                      class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 rounded-lg transition-colors"
+                      aria-label="Toggle password visibility"
+                    >
+                      <i id="pwdEyeIcon" data-lucide="eye" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Submit -->
+                <button
+                  type="submit" id="loginSubmitBtn"
+                  class="w-full py-2.5 px-4 bg-iiitg-900 hover:bg-slate-900 text-white font-bold rounded-xl shadow-lg shadow-iiitg-900/20 hover:shadow-xl transition-all text-xs sm:text-sm flex items-center justify-center gap-2 btn-press btn-shine"
+                >
+                  <span id="loginBtnText">Continue</span>
+                  <i data-lucide="arrow-right" class="w-4 h-4 text-iiitg-gold"></i>
+                </button>
+              </form>
+
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                <i data-lucide="lock" class="w-3 h-3"></i> Secured with Firebase Authentication
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-iiitg-900/90 backdrop-blur-lg border-t border-white/10 py-4 px-4 sm:px-6 lg:px-8 text-xs text-slate-300">
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-center sm:text-left">
+        <div>
+          <strong class="text-white">Indian Institute of Information Technology Guwahati</strong> &bull; Bongora, Assam - 781015
+        </div>
+        <div class="text-slate-400">
+          CampusCare &copy; 2026 IIIT Guwahati. All Rights Reserved.
+        </div>
+      </div>
+    </footer>
+  </div>
+
+
+  <!-- ═══════════════════ COMPLAINT MODAL ═══════════════════ -->
+  <div id="complaintModal" class="fixed inset-0 z-50 hidden bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="wizTitle">
+    <form id="reportForm" onsubmit="handleComplaintSubmit(event)" novalidate class="report-panel bg-white w-full sm:max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[92vh] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+
+      <!-- Header + progress -->
+      <div class="iiitg-navbar text-white px-4 sm:px-6 pt-4 pb-3 shrink-0">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <img src="assets/img/campuscare-mark.svg" alt="" class="w-8 h-8">
+            <div class="min-w-0">
+              <h3 id="wizTitle" class="font-extrabold text-base leading-tight">Report a problem</h3>
+              <p id="wizSubtitle" class="text-[11px] text-slate-300 truncate" aria-live="polite">Step 1 of 3 · What's wrong?</p>
+            </div>
+          </div>
+          <button type="button" onclick="closeComplaintModal()" class="p-2 rounded-xl hover:bg-white/10" aria-label="Close"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5 mt-3" id="wizSteps" role="group" aria-label="Report steps">
+          <div class="wiz-bar" data-step="1"><span>1 · What</span></div>
+          <div class="wiz-bar" data-step="2"><span>2 · Where</span></div>
+          <div class="wiz-bar" data-step="3"><span>3 · Details</span></div>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-4 sm:px-6 py-4 text-xs" id="wizBody">
+
+        <div id="reportDraftNotice" class="hidden mb-4 p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900" role="status" aria-live="polite">
+          <div class="flex items-start gap-2"><i data-lucide="save" class="w-4 h-4 mt-0.5 shrink-0"></i><p class="text-[11px] leading-relaxed"><strong>Draft saved on this device.</strong> It stays in this browser tab until you submit or sign out. Photos are not saved in the draft.</p></div>
+        </div>
+
+        <!-- STEP 1: WHAT -->
+        <section id="wizStep1" class="space-y-4">
+          <div id="recentReportChoices" class="hidden"></div>
+          <div class="relative">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            <input id="issueSearch" type="search" autocomplete="off" oninput="searchIssues(this.value)" placeholder="Search a problem… e.g. fan, wifi, leaking tap, lock" class="w-full pl-10 pr-3 py-3 rounded-xl border border-slate-300 text-sm input-enhanced focus:outline-none" aria-label="Search problems">
+          </div>
+          <div id="issueSearchResults" class="hidden space-y-1.5"></div>
+          <div id="categoryBrowse">
+            <span class="form-label">Or choose a type</span>
+            <div id="categoryTiles" class="grid grid-cols-3 sm:grid-cols-4 gap-1.5"></div>
+          </div>
+          <div id="issueListWrap" class="hidden">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="form-label !mb-0" id="issueListTitle">Pick the problem</span>
+              <button type="button" onclick="backToCategories()" class="text-[11px] font-bold text-iiitg-700 hover:underline">All types</button>
+            </div>
+            <div id="issueList" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5"></div>
+          </div>
+          <div id="customIssueWrap" class="hidden p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+            <label class="form-label" for="customIssue" id="customIssueLabel">Type your problem *</label>
+            <input type="text" id="customIssue" maxlength="80" placeholder="e.g. Window latch broken" class="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white text-sm" onkeydown="if(event.key==='Enter'){event.preventDefault();useCustomIssue();}">
+            <button type="button" onclick="useCustomIssue()" class="w-full py-2.5 text-sm font-bold text-white bg-iiitg-800 hover:bg-iiitg-900 rounded-xl">Continue with this problem</button>
+          </div>
+          <select id="modalCategory" class="sr-only" tabindex="-1" aria-hidden="true"></select>
+          <input type="hidden" id="modalSubCategory" value="">
+        </section>
+
+        <!-- STEP 2: WHERE -->
+        <section id="wizStep2" class="hidden space-y-4">
+          <div id="recentPlaceChoices" class="hidden"></div>
+          <div>
+            <span class="form-label">Where is the problem? *</span>
+            <div id="placeTypeGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-1.5" role="radiogroup" aria-label="Type of place"></div>
+          </div>
+          <div id="placeDetail" class="hidden space-y-3 p-3 rounded-2xl bg-slate-50 border border-slate-200">
+            <div>
+              <label class="form-label" for="placeName" id="placeNameLabel">Name *</label>
+              <input type="text" id="placeName" list="placeSuggestions" autocomplete="off" oninput="onPlaceName(this.value)" class="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white text-sm input-enhanced">
+              <datalist id="placeSuggestions"></datalist>
+              <p id="placeSuggestHint" class="hidden text-[10px] text-slate-500 mt-1">Suggestions come from places other people have typed. Pick one if it's the same place.</p>
+            </div>
+            <div>
+              <label class="form-label" for="modalLocation" id="spotLabel">Room / spot</label>
+              <input type="text" id="modalLocation" placeholder="" class="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white input-enhanced text-sm">
+            </div>
+          </div>
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="form-label !mb-0">Set the exact spot on the map <span class="normal-case font-semibold text-slate-400">(optional)</span></span>
+              <button type="button" onclick="useMyLocation(this)" class="px-3 py-2 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-1.5 shrink-0"><i data-lucide="locate-fixed" class="w-4 h-4"></i> Use my location</button>
+            </div>
+            <div id="reportMapWrap" class="space-y-1.5">
+              <div id="reportMap" class="w-full h-56 sm:h-64 rounded-xl overflow-hidden border border-slate-300 bg-slate-100"></div>
+              <p id="reportPinStatus" class="text-[11px] text-slate-500">Tap the map where the problem is. The dashed line is the IIITG campus.</p>
+            </div>
+          </div>
+          <input type="hidden" id="modalMapZone" value="">
+          <button type="button" id="reportMapToggle" class="hidden" aria-hidden="true"></button>
+        </section>
+
+        <!-- STEP 3: DETAILS -->
+        <section id="wizStep3" class="hidden space-y-4">
+          <div id="wizSummary" class="flex flex-wrap gap-2"></div>
+          <div id="similarPanel" class="hidden space-y-2" aria-live="polite"></div>
+          <div id="areaWideNote" class="hidden p-3 bg-blue-50 border border-blue-100 rounded-xl text-[11px] text-blue-900 leading-relaxed">
+            <strong>This kind of problem usually affects many people,</strong> so it will be shared. Others can press "Me too" instead of reporting it again, and it becomes urgent when enough people do.
+          </div>
+          <div id="confidentialNote" class="hidden p-3 bg-violet-50 border border-violet-200 rounded-xl text-[11px] text-violet-900 leading-relaxed">
+            <strong>Confidential report.</strong> Only the Administrator will see this ticket. It is never shown to other people. You can attach a photo (kept private); to share a video, send it to the Administrator directly (e.g. on WhatsApp) after reporting.
+          </div>
+          <div>
+            <label for="modalDescription" class="form-label">Describe the problem *</label>
+            <textarea id="modalDescription" rows="3" placeholder="What happened? Since when? Anything the technician should know?" class="w-full px-3 py-3 rounded-xl border border-slate-300 input-enhanced text-sm resize-y"></textarea>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label for="modalPhone" class="form-label">Contact number *</label>
+              <input type="tel" id="modalPhone" placeholder="For the technician to reach you" class="w-full px-3 py-3 rounded-xl border border-slate-300 input-enhanced text-sm">
+            </div>
+            <div>
+              <span class="form-label">Photo (optional)</span>
+              <div class="border-2 border-dashed border-slate-300 rounded-xl px-3 py-2.5 text-center cursor-pointer hover:border-iiitg-700 hover:bg-iiitg-50/30 transition-all flex items-center justify-center gap-2" onclick="document.getElementById('complaintPhotoInput').click()">
+                <i data-lucide="camera" class="w-5 h-5 text-slate-400"></i>
+                <span id="complaintPhotoName" class="text-xs text-slate-500 truncate">Add a photo</span>
+                <input type="file" id="complaintPhotoInput" accept="image/*,video/*" capture="environment" class="hidden" onchange="handleFileUpload(this, 'complaintPhotoName')">
+              </div>
+            </div>
+          </div>
+          <details id="availabilityDetails" class="rounded-xl border border-slate-200 bg-white">
+            <summary class="cursor-pointer list-none px-3.5 py-3 flex items-start gap-2.5 focus-visible:outline-offset-2">
+              <i data-lucide="calendar-clock" class="w-4 h-4 mt-0.5 text-iiitg-700 shrink-0"></i>
+              <span class="min-w-0"><strong class="block text-xs text-slate-800">When are you available for a repair?</strong><span class="block text-[10px] text-slate-500 mt-0.5">Optional. Share up to two time windows; the technician will confirm one.</span></span>
+            </summary>
+            <div class="px-3.5 pb-3.5 space-y-3">
+              <fieldset class="space-y-1.5">
+                <legend class="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Preferred window 1</legend>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="text-[10px] font-semibold text-slate-600">From<input id="availability1Start" type="datetime-local" class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 px-2 py-2 text-[11px] text-slate-800 input-enhanced"></label>
+                  <label class="text-[10px] font-semibold text-slate-600">Until<input id="availability1End" type="datetime-local" class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 px-2 py-2 text-[11px] text-slate-800 input-enhanced"></label>
+                </div>
+              </fieldset>
+              <fieldset class="space-y-1.5">
+                <legend class="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Preferred window 2</legend>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="text-[10px] font-semibold text-slate-600">From<input id="availability2Start" type="datetime-local" class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 px-2 py-2 text-[11px] text-slate-800 input-enhanced"></label>
+                  <label class="text-[10px] font-semibold text-slate-600">Until<input id="availability2End" type="datetime-local" class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 px-2 py-2 text-[11px] text-slate-800 input-enhanced"></label>
+                </div>
+              </fieldset>
+            </div>
+          </details>
+          <label class="flex items-start gap-2.5 p-3 bg-rose-50 border border-rose-100 rounded-xl cursor-pointer">
+            <input type="checkbox" id="modalUrgent" class="w-4 h-4 mt-0.5 accent-rose-600">
+            <span class="text-[11px] font-semibold text-rose-800 leading-tight">This is urgent<br><span class="text-rose-600 font-normal">Safety risk (sparks, flooding, broken lock) or many people affected.</span></span>
+          </label>
+          <label class="flex items-start gap-2.5 p-3 bg-blue-50 border border-blue-100 rounded-xl cursor-pointer">
+            <input type="checkbox" id="modalIsPublic" class="w-4 h-4 mt-0.5 accent-blue-600">
+            <span class="text-[11px] font-semibold text-blue-800 leading-tight">Share with others (common area issue)<br><span class="text-blue-600 font-normal">Others facing it can press "Me too" instead of reporting again.</span></span>
+          </label>
+        </section>
+      </div>
+
+      <!-- Footer -->
+      <div class="shrink-0 border-t border-slate-200 bg-white px-4 sm:px-6 py-3 flex items-center gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <button type="button" id="wizBack" onclick="wizardBack()" class="px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
+        <div class="flex-1"></div>
+        <button type="button" id="wizNext" onclick="wizardNext()" class="px-6 py-3 text-sm font-extrabold text-white bg-iiitg-800 hover:bg-iiitg-900 rounded-xl flex items-center gap-2 btn-press">Next <i data-lucide="arrow-right" class="w-4 h-4"></i></button>
+        <button type="submit" id="wizSubmit" class="hidden px-6 py-3 text-sm font-extrabold text-iiitg-900 bg-iiitg-gold hover:bg-amber-400 rounded-xl flex items-center gap-2 btn-press"><i data-lucide="send" class="w-4 h-4"></i> Submit ticket</button>
+      </div>
+    </form>
+  </div>
+
+
+  <!-- ═══════════════════ FEEDBACK MODAL (FR-09) ═══════════════════ -->
+  <div id="feedbackModal" class="fixed inset-0 z-50 hidden bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 modal-overlay">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 space-y-4 text-xs modal-content">
+
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+            <i data-lucide="star" class="w-4 h-4 text-amber-500"></i>
+          </div>
+          <h3 class="font-bold text-sm text-slate-900">Rate Resolution Quality</h3>
+        </div>
+        <button onclick="closeFeedbackModal()" class="text-slate-400 hover:text-slate-600 transition-colors p-1" aria-label="Close">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <p class="text-slate-600">Please rate the resolution for ticket <strong id="feedbackTicketId" class="text-iiitg-800 font-mono">IIITG-2026-0294</strong>.</p>
+
+      <!-- Interactive Stars -->
+      <div class="flex items-center justify-center gap-3 py-3">
+        <button type="button" onclick="setRating(1)" class="feedback-star text-slate-300 cursor-pointer hover:scale-125 transition-transform p-1" aria-label="1 star"><svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+        <button type="button" onclick="setRating(2)" class="feedback-star text-slate-300 cursor-pointer hover:scale-125 transition-transform p-1" aria-label="2 stars"><svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+        <button type="button" onclick="setRating(3)" class="feedback-star text-slate-300 cursor-pointer hover:scale-125 transition-transform p-1" aria-label="3 stars"><svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+        <button type="button" onclick="setRating(4)" class="feedback-star text-slate-300 cursor-pointer hover:scale-125 transition-transform p-1" aria-label="4 stars"><svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+        <button type="button" onclick="setRating(5)" class="feedback-star text-slate-300 cursor-pointer hover:scale-125 transition-transform p-1" aria-label="5 stars"><svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
+      </div>
+
+      <div>
+        <label for="feedbackRemarks" class="block font-bold text-slate-700 uppercase mb-1.5">Remarks / Comments</label>
+        <textarea id="feedbackRemarks" rows="2" placeholder="e.g. Technician arrived promptly and replaced the corridor LED light." class="w-full px-3 py-2.5 border border-slate-300 rounded-xl input-enhanced resize-y"></textarea>
+      </div>
+
+      <div class="flex justify-end gap-2.5 pt-2">
+        <button onclick="closeFeedbackModal()" class="px-4 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+        <button onclick="submitFeedback()" class="px-5 py-2.5 font-bold text-white bg-iiitg-800 hover:bg-iiitg-900 rounded-xl shadow-sm hover:shadow transition-all btn-press">Submit Feedback</button>
+      </div>
+    </div>
+  </div>
+
+
+
+
+  <!-- ═══════════════════ PASSWORD RESET MODAL ═══════════════════ -->
+  <div id="resetPasswordModal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 modal-overlay">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-slate-200 space-y-4 modal-content">
+
+      <div class="flex items-center justify-between pb-2.5 border-b border-slate-100">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
+            <i data-lucide="key-round" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">Reset Password</h3>
+            <span class="text-[10px] text-slate-400">IIITG Security & Clerk Verification</span>
+          </div>
+        </div>
+        <button onclick="closeResetPasswordModal()" class="text-slate-400 hover:text-slate-600 transition-colors p-1" aria-label="Close">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Technicians: the Administrator resets staff passwords -->
+      <div id="resetStaffInfo" class="hidden space-y-3 text-xs">
+        <div class="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 leading-relaxed">
+          <strong class="block text-sm mb-1">Forgot your technician password?</strong>
+          Contact the CampusCare Administrator (Estate / Admin office). They will reset it and give you a new <strong>temporary password</strong>.
+        </div>
+        <ol class="list-decimal pl-5 space-y-1 text-slate-600">
+          <li>Ask the Administrator to reset your password.</li>
+          <li>Sign in here with your login ID and the temporary password.</li>
+          <li>You'll be asked to choose your own new password straight away.</li>
+        </ol>
+        <button type="button" onclick="closeResetPasswordModal()" class="w-full py-2.5 bg-iiitg-900 text-white font-bold rounded-xl">OK</button>
+      </div>
+
+      <!-- Step 1: Request OTP -->
+      <form id="resetStep1Form" onsubmit="handleSendResetOtp(event)" class="space-y-3.5 text-xs">
+        <p class="text-slate-600 text-xs leading-relaxed">
+          Enter your registered IIITG email or Roll Number. We will email you a secure link to set a new password.
+        </p>
+
+        <div>
+          <label for="resetEmailInput" class="block font-bold text-slate-700 uppercase mb-1.5">Roll No / Webmail Address</label>
+          <input
+            type="text"
+            id="resetEmailInput"
+            required
+            placeholder="e.g. 2301045@iiitg.ac.in"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs input-enhanced"
+          >
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-iiitg-900 hover:bg-slate-900 text-white font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 btn-press">
+          <span>Send Reset Link</span>
+          <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-iiitg-gold"></i>
+        </button>
+      </form>
+
+      <!-- Step 2: Reset link sent -->
+      <div id="resetStep2Form" class="hidden space-y-3.5 text-xs">
+        <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2">
+          <i data-lucide="mail-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
+          <span>If an account exists for <strong id="resetTargetDisplay" class="font-mono">...</strong>, a password reset link has been sent. Open the email, set a new password, then sign in here.</span>
+        </div>
+        <p class="text-[11px] text-slate-500 leading-relaxed">Don't see it? Check your spam folder. Staff members without a mailbox should ask the Administrator for a temporary password.</p>
+        <button type="button" onclick="closeResetPasswordModal()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm transition-all btn-press">Back to Sign In</button>
+      </div>
+
+      <div class="pt-1 text-center">
+        <button type="button" onclick="closeResetPasswordModal()" class="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors px-3 py-1">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════ TICKET DETAIL & CHAT MODAL ═══════════════════ -->
+  <div id="ticketDetailModal" class="fixed inset-0 z-[70] hidden bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 lg:p-8 modal-overlay">
+    <div class="bg-white sm:rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden modal-content h-[100dvh] sm:h-[90vh] md:h-[80vh]">
+      <!-- Header -->
+      <div class="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 flex items-center justify-between bg-white z-10 shadow-sm shrink-0">
+         <div class="min-w-0">
+           <h3 class="font-bold text-base sm:text-lg text-slate-900 flex flex-wrap items-center gap-2">
+             <span id="detailTicketId" class="font-mono text-iiitg-700 bg-iiitg-50 px-2 py-0.5 rounded-lg border border-iiitg-100"></span> 
+             <span id="detailTicketStatus" class="px-2.5 py-0.5 text-xs font-bold rounded-full border"></span>
+           </h3>
+           <p class="text-xs text-slate-500 mt-1" id="detailTicketDate"></p>
+         </div>
+         <button onclick="closeTicketDetailModal()" class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <!-- Body -->
+      <div class="flex-1 overflow-hidden flex flex-col md:flex-row relative">
+         <!-- Left: Details -->
+         <details open class="detail-panel w-full md:w-1/3 md:border-r border-b md:border-b-0 border-slate-100 bg-slate-50/50 shrink-0 max-h-[40%] md:max-h-none overflow-y-auto">
+            <summary class="md:hidden px-4 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer select-none">Ticket details</summary>
+         <div class="p-4 md:p-6">
+            <h4 class="hidden md:flex text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 items-center gap-2"><i data-lucide="info" class="w-4 h-4"></i> Ticket details</h4>
+            <div class="space-y-4">
+               <!-- Badges: priority / affected / reopened / outside / confidential -->
+               <div id="detailMetaRow" class="flex flex-wrap gap-1.5"></div>
+
+               <div>
+                 <span class="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Issue</span>
+                 <span class="text-sm font-bold text-slate-900 leading-snug block" id="detailCategory"></span>
+               </div>
+
+               <section id="ticketProgressPanel" class="rounded-2xl border border-slate-200 bg-white p-3.5" aria-label="Ticket progress" aria-live="polite">
+                 <div class="flex items-center justify-between gap-2 mb-3">
+                   <h4 class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Progress</h4>
+                   <span id="ticketLastUpdated" class="text-[10px] font-semibold text-slate-500"></span>
+                 </div>
+                 <ol id="ticketProgressSteps" class="ticket-progress-steps"></ol>
+                 <p id="ticketNextStep" class="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-700"></p>
+                 <div id="ticketProgressActions" class="hidden mt-2 flex gap-2"></div>
+                 <section id="ticketAppointmentPanel" class="hidden mt-3 border-t border-slate-200 pt-3" aria-label="Repair visit appointment">
+                   <div class="flex items-center gap-1.5 mb-2"><i data-lucide="calendar-clock" class="w-4 h-4 text-iiitg-700"></i><h5 class="text-[10px] font-extrabold uppercase tracking-wide text-slate-600">Repair visit</h5></div>
+                   <div id="currentAppointment" class="rounded-xl border border-slate-200 bg-white px-3 py-2.5"></div>
+                   <div id="reporterAvailability" class="hidden mt-2"></div>
+                   <div id="appointmentResponseActions" class="hidden flex flex-wrap gap-2 mt-2"></div>
+                   <div id="appointmentHistory"></div>
+                   <form id="appointmentProposalForm" class="hidden mt-3 rounded-xl bg-slate-50 p-3 space-y-2" onsubmit="submitAppointmentProposal(event)">
+                     <p class="text-[10px] font-bold text-slate-700">Propose a visit window</p>
+                     <div class="grid grid-cols-2 gap-2">
+                       <label class="text-[10px] font-semibold text-slate-600">From<input id="appointmentStart" type="datetime-local" required class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 px-2 py-2 text-[11px] text-slate-800 input-enhanced"></label>
+                       <label class="text-[10px] font-semibold text-slate-600">Until<input id="appointmentEnd" type="datetime-local" required class="mt-1 w-full min-w-0 rounded-lg border border-slate-300 px-2 py-2 text-[11px] text-slate-800 input-enhanced"></label>
+                     </div>
+                     <button type="submit" class="appointment-button propose">Send visit proposal</button>
+                   </form>
+                 </section>
+               </section>
+
+               <div id="detailReporterWrap" class="hidden">
+                 <span class="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Reported by</span>
+                 <span class="text-sm font-semibold text-slate-800 leading-snug block" id="detailReporter"></span>
+               </div>
+
+               <div>
+                 <span class="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Location</span>
+                 <span class="text-sm font-semibold text-slate-800" id="detailLocation"></span>
+                 <a id="detailDirections" target="_blank" rel="noopener" class="hidden mt-2 text-xs font-bold text-blue-600 hover:underline w-max items-center gap-1"><i data-lucide="navigation" class="w-3 h-3"></i> Open exact spot in Google Maps</a>
+               </div>
+
+               <div id="detailContactWrap" class="hidden">
+                 <span class="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Contact</span>
+                 <a id="detailPhone" class="text-sm font-semibold text-emerald-600 hover:underline w-max flex items-center gap-1.5"><i data-lucide="phone" class="w-3.5 h-3.5"></i><span id="detailPhoneText"></span></a>
+               </div>
+
+               <div id="detailAssignedWrap" class="hidden">
+                 <span class="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Assigned technician</span>
+                 <span class="text-sm font-semibold text-slate-800" id="detailAssigned"></span>
+               </div>
+
+               <div>
+                 <span class="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">What's wrong</span>
+                 <p class="text-sm text-slate-700 leading-relaxed bg-white p-3 border border-slate-200 rounded-xl shadow-sm whitespace-pre-wrap break-words" id="detailDescription"></p>
+               </div>
+
+               <div id="detailPhotoWrap" class="hidden">
+                 <span class="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Attached photo</span>
+                 <div id="detailPhoto"></div>
+               </div>
+            </div>
+         </div>
+         </details>
+         <!-- Right: Chat & Log -->
+         <div class="w-full md:w-2/3 flex-1 min-h-0 flex flex-col bg-white relative">
+            <h4 class="px-6 py-3 border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider bg-white flex items-center gap-2 shrink-0"><i data-lucide="message-square" class="w-4 h-4"></i> Activity & Communication</h4>
+            
+            <!-- Messages List -->
+            <div id="detailMessages" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/50">
+               <!-- JS rendered messages -->
+            </div>
+            
+            <!-- Input Area -->
+            <div id="chatInputArea" class="p-3 sm:p-4 border-t border-slate-200 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+               <form id="chatForm" onsubmit="handleSendMessage(event)" class="flex gap-2">
+                  <input type="file" id="chatFileInput" accept="image/*,video/*" class="hidden" onchange="handleChatFileUpload(event)">
+                  <button type="button" id="chatAttachBtn" onclick="document.getElementById('chatFileInput').click()" class="p-2.5 text-slate-400 hover:text-iiitg-700 hover:bg-slate-100 rounded-xl transition-colors border border-transparent hover:border-slate-200" title="Attach Proof/Image"><i data-lucide="paperclip" class="w-5 h-5"></i></button>
+                  <input type="text" id="chatInput" placeholder="Type a message, update, or ask a question..." class="flex-1 px-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-iiitg-700 focus:outline-none input-enhanced" required>
+                  <button type="submit" class="px-5 py-2.5 bg-iiitg-800 text-white rounded-xl font-bold hover:bg-iiitg-900 transition-colors flex items-center gap-2 shadow-sm btn-press"><i data-lucide="send" class="w-4 h-4"></i><span class="hidden sm:inline">Send</span></button>
+               </form>
+               <div id="chatClosedNotice" class="hidden flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-center sm:text-left">
+                  <div class="flex items-center gap-2 text-xs font-semibold text-slate-500 flex-1 justify-center sm:justify-start">
+                    <i data-lucide="lock" class="w-4 h-4 shrink-0 text-slate-400"></i>
+                    <span>This conversation is closed because the ticket is marked fixed. You can still read the full history above.</span>
+                  </div>
+                  <button id="chatReopenBtn" type="button" onclick="reopenFromChat()" class="shrink-0 px-4 py-2.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 inline-flex items-center justify-center gap-1.5 btn-press"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>Reopen to continue</button>
+               </div>
+            </div>
+         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ RESOLVE TICKET MODAL (STAFF) ═══════════════════ -->
+  <div id="resolveModal" class="fixed inset-0 z-[80] hidden bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 modal-overlay">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 space-y-4 modal-content text-xs">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+          </div>
+          <h3 class="font-bold text-sm text-slate-900">Mark ticket as fixed</h3>
+        </div>
+        <button onclick="closeResolveModal()" class="text-slate-400 hover:text-slate-600 transition-colors p-1" aria-label="Close">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      
+      <p class="text-slate-600">You are about to close ticket <strong id="resolveTicketId" class="text-iiitg-800 font-mono"></strong>. Please provide final remarks and optional photo proof of resolution.</p>
+      
+      <form onsubmit="handleResolveSubmit(event)" class="space-y-4">
+        <div>
+          <label for="resolveRemarks" class="block font-bold text-slate-700 uppercase mb-1.5">What did you fix? *</label>
+          <textarea id="resolveRemarks" rows="3" required placeholder="e.g. Replaced the blown fuse and tested the power socket successfully." class="w-full px-3 py-2.5 border border-slate-300 rounded-xl input-enhanced resize-y"></textarea>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block font-bold text-slate-700 uppercase">What did you use?</label>
+            <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer"><input type="checkbox" id="resolveNoMaterials" onchange="toggleNoMaterials()" class="accent-iiitg-800"> Nothing used</label>
+          </div>
+          <div id="resolveMaterials" class="space-y-1.5 max-h-[220px] overflow-y-auto pr-1"></div>
+          <div class="flex gap-2 mt-2">
+            <input id="resolveOtherItem" type="text" placeholder="Other item (e.g. special bolt)" class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs">
+            <input id="resolveOtherQty" type="number" min="1" value="1" class="w-16 px-2 py-2 border border-slate-300 rounded-lg text-xs" aria-label="Quantity">
+            <button type="button" onclick="addOtherMaterial()" class="px-3 py-2 text-xs font-bold text-iiitg-800 bg-iiitg-50 border border-iiitg-100 rounded-lg">Add</button>
+          </div>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 uppercase mb-1.5">Resolution Proof (Photo)</label>
+          <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/30 transition-all group" onclick="document.getElementById('resolvePhotoInput').click()">
+            <i data-lucide="camera" class="w-6 h-6 mx-auto text-slate-400 mb-1.5 group-hover:text-emerald-600 transition-colors"></i>
+            <span id="resolvePhotoName" class="text-sm text-slate-500 group-hover:text-slate-700 transition-colors">Attach post-repair photo</span>
+            <input type="file" id="resolvePhotoInput" accept="image/*,video/*" class="hidden" onchange="handleFileUpload(this, 'resolvePhotoName')">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2.5 pt-2">
+          <button type="button" onclick="closeResolveModal()" class="px-4 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+          <button type="submit" class="px-5 py-2.5 font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm hover:shadow transition-all btn-press flex items-center gap-2">
+            <i data-lucide="check" class="w-4 h-4"></i> Mark as fixed
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ EMERGENCY DIRECTORY MODAL ═══════════════════ -->
+  <div id="emergencyModal" class="fixed inset-0 z-[100] hidden bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 modal-overlay">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full flex flex-col overflow-hidden modal-content max-h-[90vh]">
+      <div class="px-6 py-4 border-b border-rose-100 flex items-center justify-between bg-rose-50 text-rose-900">
+        <h3 class="font-bold text-lg flex items-center gap-2"><i data-lucide="phone-call" class="w-5 h-5"></i> Campus Emergency Directory</h3>
+        <button onclick="closeEmergencyModal()" class="p-2 text-rose-400 hover:text-rose-700 hover:bg-rose-100 rounded-xl transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="p-6 overflow-y-auto bg-white grid grid-cols-1 sm:grid-cols-2 gap-4">
+         <div class="p-4 rounded-xl border border-rose-200 bg-rose-50/30 flex flex-col items-center text-center">
+            <i data-lucide="shield-alert" class="w-8 h-8 text-rose-600 mb-2"></i>
+            <h4 class="font-bold text-sm text-slate-900">Main Gate Security</h4>
+            <p class="text-xs text-slate-500 mb-3 mt-1">24/7 Campus Security & Entry</p>
+            <a href="tel:+919999999999" class="px-4 py-2 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 w-full transition-colors">Call +91 99999 99999</a>
+         </div>
+         <div class="p-4 rounded-xl border border-rose-200 bg-rose-50/30 flex flex-col items-center text-center">
+            <i data-lucide="activity" class="w-8 h-8 text-rose-600 mb-2"></i>
+            <h4 class="font-bold text-sm text-slate-900">Medical Center / Ambulance</h4>
+            <p class="text-xs text-slate-500 mb-3 mt-1">Emergency Health & Ambulance</p>
+            <a href="tel:+918888888888" class="px-4 py-2 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 w-full transition-colors">Call +91 88888 88888</a>
+         </div>
+         <div class="p-4 rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center text-center">
+            <i data-lucide="users" class="w-8 h-8 text-slate-600 mb-2"></i>
+            <h4 class="font-bold text-sm text-slate-900">Boys' Hostel Warden</h4>
+            <p class="text-xs text-slate-500 mb-3 mt-1">Hostel Emergencies (Night)</p>
+            <a href="tel:+917777777777" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900 w-full transition-colors">Call +91 77777 77777</a>
+         </div>
+         <div class="p-4 rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center text-center">
+            <i data-lucide="wifi" class="w-8 h-8 text-blue-600 mb-2"></i>
+            <h4 class="font-bold text-sm text-slate-900">NKN IT Cell Hotline</h4>
+            <p class="text-xs text-slate-500 mb-3 mt-1">Campus-wide Network Outages</p>
+            <a href="tel:+916666666666" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 w-full transition-colors">Call +91 66666 66666</a>
+         </div>
+      </div>
+    </div>
+  </div>
+
+  
+
+  <!-- Add Staff Modal -->
+  <div id="addStaffModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onclick="closeAddStaffModal()"></div>
+    <div class="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] flex flex-col">
+      <div class="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <h3 class="font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="user-plus" class="w-4 h-4 text-iiitg-700"></i> <span id="addStaffTitle">Register Technician</span>
+        </h3>
+        <button onclick="closeAddStaffModal()" class="text-slate-400 hover:text-rose-500 transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="addStaffForm" class="p-5 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">Account type</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" data-kind="technician" onclick="setStaffKind('technician')" class="staff-kind-btn seg-btn active text-left px-3 py-2 rounded-lg border border-slate-200">🔧 Technician<span class="block text-[10px] font-semibold opacity-70">fixes reported problems</span></button>
+            <button type="button" data-kind="member" onclick="setStaffKind('member')" class="staff-kind-btn seg-btn text-left px-3 py-2 rounded-lg border border-slate-200">🧑‍💼 Non-teaching staff<span class="block text-[10px] font-semibold opacity-70">reports problems only</span></button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="newStaffName" class="block text-xs font-bold text-slate-700 mb-1.5">Full Name</label>
+            <input type="text" id="newStaffName" required oninput="generateStaffCredentials()" placeholder="e.g. Ramesh Kumar" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-iiitg-500/20 focus:border-iiitg-500 transition-all">
+          </div>
+          <div>
+            <label for="newStaffPhone" class="block text-xs font-bold text-slate-700 mb-1.5">Phone Number</label>
+            <input type="tel" id="newStaffPhone" required placeholder="e.g. 9876543210" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-iiitg-500/20 focus:border-iiitg-500 transition-all">
+          </div>
+        </div>
+        <div>
+          <label for="newStaffEmail" class="block text-xs font-bold text-slate-700 mb-1.5">Email (used to log in &amp; reset password)</label>
+          <input type="email" id="newStaffEmail" required oninput="generateStaffCredentials()" placeholder="e.g. ramesh@gmail.com (their own email)" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-iiitg-500/20 focus:border-iiitg-500 transition-all">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label id="newStaffDeptLabel" for="newStaffDept" class="block text-xs font-bold text-slate-700 mb-1.5">Team</label>
+            <select id="newStaffDept" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-iiitg-500/20 focus:border-iiitg-500 transition-all bg-white">
+              <option value="">Select team...</option>
+            </select>
+            <input id="newStaffSection" type="text" placeholder="e.g. Library, Accounts, Hostel office" class="hidden w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-iiitg-500/20 focus:border-iiitg-500 transition-all">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1.5">Profile Picture</label>
+            <div class="border-2 border-dashed border-slate-300 rounded-lg p-2 text-center cursor-pointer hover:border-iiitg-700 hover:bg-iiitg-50/30 transition-all group" onclick="document.getElementById('newStaffPhotoInput').click()">
+              <span id="newStaffPhotoName" class="text-[10px] text-slate-500 group-hover:text-slate-700 transition-colors">Upload Image</span>
+              <input type="file" id="newStaffPhotoInput" accept="image/*" class="hidden" onchange="handleFileUpload(this, 'newStaffPhotoName')">
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mt-2">
+          <p class="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-2">Auto-Generated System Credentials</p>
+          <div class="space-y-2">
+            <div>
+              <span class="text-xs text-slate-500 block mb-0.5">System Login ID</span>
+              <div class="font-mono text-sm font-bold text-slate-900 bg-white px-2 py-1.5 rounded border border-blue-200" id="generatedStaffEmail">-</div>
+            </div>
+            <div>
+              <span class="text-xs text-slate-500 block mb-0.5">Temporary Password</span>
+              <div class="font-mono text-sm font-bold text-slate-900 bg-white px-2 py-1.5 rounded border border-blue-200" id="generatedStaffPass">-</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="pt-2">
+          <button type="submit" class="w-full py-2.5 bg-iiitg-800 hover:bg-iiitg-900 text-white text-sm font-bold rounded-xl transition-all shadow-md">Create Staff Member</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Reset Password Modal -->
+  <div id="adminResetPasswordModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onclick="hideModal('adminResetPasswordModal')"></div>
+    <div class="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
+      <div class="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <i data-lucide="key" class="w-6 h-6 text-emerald-600"></i>
+      </div>
+      <h3 id="adminCredTitle" class="font-bold text-slate-900 text-lg mb-2">Password Reset Successful</h3>
+      <p class="text-sm text-slate-500 mb-4"><span id="adminCredNote">A new temporary password is now active for</span> <span id="resetStaffNameDisplay" class="font-bold text-slate-800"></span>.</p>
+      
+      <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3">
+        <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Password</span>
+        <span class="font-mono text-lg font-bold text-slate-800" id="resetStaffNewPassDisplay"></span>
+      </div>
+      <p id="adminCredHint" class="hidden text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-3 text-left">Shown once — copy it now. Give this temporary password to the technician; they will set their own on first sign-in. It is not stored anywhere.</p>
+
+      <div class="text-xs text-slate-600 mb-4 bg-blue-50/70 p-3 rounded-xl border border-blue-100 text-left space-y-1.5">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-slate-500">Phone:</span>
+          <span id="resetStaffPhoneDisplay" class="font-semibold text-slate-900">-</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-slate-500">Email:</span>
+          <span id="resetStaffEmailDisplay" class="font-semibold text-slate-900">-</span>
+        </div>
+        <p id="adminCredLoginNote" class="hidden text-[11px] text-slate-500 pt-1 border-t border-blue-100 mt-1">They can sign in with <strong>either the phone number or the email</strong> + this password.</p>
+      </div>
+      
+      <button onclick="hideModal('adminResetPasswordModal')" class="w-full py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors">Done</button>
+    </div>
+  </div>
+
+
+  <!-- Admin: confirm technician deletion -->
+  <div id="deleteStaffModal" class="hidden fixed inset-0 z-[65] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onclick="hideModal('deleteStaffModal')"></div>
+    <div class="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 text-xs text-center">
+      <div class="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center mx-auto"><i data-lucide="trash-2" class="w-6 h-6 text-rose-600"></i></div>
+      <h3 class="font-bold text-slate-900 text-lg">Delete technician?</h3>
+      <p class="text-sm text-slate-600"><strong id="deleteStaffName" class="text-slate-900"></strong><br><span id="deleteStaffEmail" class="font-mono text-[11px] text-slate-500"></span></p>
+      <p class="text-slate-600 leading-relaxed bg-rose-50 border border-rose-100 rounded-xl p-3 text-left">Their login will stop working and their profile will be removed. <span id="deleteStaffTickets"></span> This cannot be undone.</p>
+      <div class="flex gap-2">
+        <button type="button" onclick="hideModal('deleteStaffModal')" class="flex-1 py-2.5 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
+        <button type="button" onclick="confirmDeleteStaff(this)" class="flex-1 py-2.5 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student: reopen a ticket that isn't really fixed -->
+  <div id="reopenModal" class="hidden fixed inset-0 z-[65] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onclick="hideModal('reopenModal')"></div>
+    <form onsubmit="submitReopen(event)" class="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 text-xs">
+      <h3 class="font-bold text-slate-900 text-base">Problem not fixed?</h3>
+      <p class="text-slate-600">Ticket <strong id="reopenTicketId" class="font-mono text-iiitg-700"></strong> will be reopened and sent back to the technician.</p>
+      <div>
+        <label class="form-label" for="reopenReason">What is still wrong? *</label>
+        <textarea id="reopenReason" required rows="3" placeholder="e.g. The fan works for 10 minutes and then stops again" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm resize-none"></textarea>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" onclick="hideModal('reopenModal')" class="flex-1 py-2.5 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
+        <button type="submit" class="flex-1 py-2.5 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl">Reopen ticket</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Profile (every campus member) -->
+  <div id="profileModal" class="hidden fixed inset-0 z-[66] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+    <form onsubmit="saveProfile(event)" class="relative bg-white w-full max-w-lg rounded-2xl shadow-2xl p-5 sm:p-6 space-y-4 text-xs">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h3 class="font-extrabold text-slate-900 text-lg">Your CampusCare profile</h3>
+          <p id="profileEmail" class="text-slate-500 font-mono text-[11px]"></p>
+        </div>
+        <button type="button" id="profileClose" onclick="hideModal('profileModal')" class="p-1.5 text-slate-400 hover:text-slate-700" aria-label="Close"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <p id="profileForcedNote" class="hidden p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 leading-relaxed">Welcome! Tell us who you are once. Your reports will be filled in automatically, and the right people will know who raised them.</p>
+      <div>
+        <span class="form-label">I am a *</span>
+        <div class="grid grid-cols-3 gap-2">
+          <label class="ptype-card"><input type="radio" name="profileType" value="student" class="sr-only" onchange="onProfileTypeChange()"><i data-lucide="graduation-cap" class="w-5 h-5"></i><span>Student</span></label>
+          <label class="ptype-card"><input type="radio" name="profileType" value="faculty" class="sr-only" onchange="onProfileTypeChange()"><i data-lucide="presentation" class="w-5 h-5"></i><span>Faculty</span></label>
+          <label class="ptype-card"><input type="radio" name="profileType" value="staff" class="sr-only" onchange="onProfileTypeChange()"><i data-lucide="id-card" class="w-5 h-5"></i><span>Non-teaching staff</span></label>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div><label class="form-label" for="profileName">Full name *</label><input id="profileName" required class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"></div>
+        <div><label class="form-label" for="profilePhone">Phone *</label><input id="profilePhone" type="tel" required placeholder="For the technician to reach you" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"></div>
+        <div><label class="form-label" id="profileDeptLabel" for="profileDept">Department</label><input id="profileDept" placeholder="e.g. B.Tech CSE" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"></div>
+        <div><label class="form-label" id="profileIdLabel" for="profileIdNo">Roll number</label><input id="profileIdNo" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"></div>
+        <div><label class="form-label" for="profilePlaceType">Where you usually are</label><select id="profilePlaceType" onchange="onProfilePlaceType()" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"></select></div>
+        <div><label class="form-label" id="profileZoneLabel" for="profileZone">Name</label><input id="profileZone" list="profilePlaceSuggestions" placeholder="Type the name" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"><datalist id="profilePlaceSuggestions"></datalist></div>
+        <div><label class="form-label" id="profileSpotLabel" for="profileSpot">Room number</label><input id="profileSpot" placeholder="e.g. 214 / Library desk" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"></div>
+      </div>
+      <button type="submit" class="w-full py-3 bg-iiitg-800 hover:bg-iiitg-900 text-white font-bold rounded-xl text-sm">Save profile</button>
+    </form>
+  </div>
+  <!-- Profile Picture Update Modal (Staff) -->
+  <div id="staffProfileUpdateModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onclick="hideModal('staffProfileUpdateModal')"></div>
+    <div class="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden p-6 text-center flex flex-col">
+      <h3 class="font-bold text-slate-900 text-lg mb-2">Update Profile Picture</h3>
+      <p class="text-xs text-slate-500 mb-4">Upload a new professional profile picture. All changes are subject to Administrator verification before they go live on your official profile.</p>
+      
+      <form id="staffProfileUpdateForm" class="space-y-4">
+        <div>
+          <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-iiitg-700 hover:bg-iiitg-50/30 transition-all group" onclick="document.getElementById('updateProfilePhotoInput').click()">
+            <i data-lucide="image" class="w-6 h-6 mx-auto text-slate-400 mb-1.5 group-hover:text-iiitg-700 transition-colors"></i>
+            <span id="updateProfilePhotoName" class="text-sm text-slate-500 group-hover:text-slate-700 transition-colors">Choose New Photo</span>
+            <input type="file" id="updateProfilePhotoInput" accept="image/*" class="hidden" required onchange="handleFileUpload(this, 'updateProfilePhotoName')">
+          </div>
+        </div>
+        
+        <div class="flex gap-3 pt-2">
+          <button type="button" onclick="hideModal('staffProfileUpdateModal')" class="flex-1 py-2 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">Cancel</button>
+          <button type="submit" class="flex-1 py-2 font-bold text-white bg-iiitg-800 hover:bg-iiitg-900 rounded-xl transition-colors">Submit for Review</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modular JS Architecture -->
+  <!-- Firebase SDKs (ES Modules) -->
+  <!-- ═══ APPLICATION SCRIPTS (layered architecture: see docs/ARCHITECTURE.md) ═══ -->
+  <!-- Shared configuration -->
+  <script src="js/shared/catalog.js?v=520" defer></script>
+  <!-- Service layer: API Gateway + services (ES modules) -->
+  <script type="module" src="js/backend/gateway.js?v=520"></script>
+  <!-- Presentation layer: core -->
+  <script src="js/frontend/core/state.js?v=520" defer></script>
+  <script src="js/frontend/core/utils.js?v=520" defer></script>
+  <script src="js/frontend/core/theme.js?v=520" defer></script>
+  <!-- Presentation layer: screens & components -->
+  <script src="js/frontend/ui/login.js?v=520" defer></script>
+  <script src="js/frontend/ui/account.js?v=520" defer></script>
+  <script src="js/frontend/ui/campus-user.js?v=520" defer></script>
+  <script src="js/frontend/ui/report-form.js?v=520" defer></script>
+  <script src="js/frontend/ui/technician.js?v=520" defer></script>
+  <script src="js/frontend/ui/admin.js?v=520" defer></script>
+  <script src="js/frontend/ui/ticket-chat.js?v=520" defer></script>
+  <script src="js/frontend/ui/feedback.js?v=520" defer></script>
+  <script src="js/frontend/ui/map.js?v=520" defer></script>
+  <script src="js/frontend/ui/reports.js?v=520" defer></script>
+  <script src="js/frontend/ui/nav.js?v=520" defer></script>
+  <script src="js/frontend/ui/notify.js?v=520" defer></script>
+  <script src="js/frontend/ui/profile.js?v=520" defer></script>
+  <script src="js/frontend/ui/notices.js?v=520" defer></script>
+  <!-- App bootstrap -->
+  <script src="js/frontend/app.js?v=520" defer></script>
+
+
+  
+  <!-- Password Reset Modal -->
+  <div id="passwordResetModal" class="fixed inset-0 z-50 hidden bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 modal-overlay">
+    <div class="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] modal-content">
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <h3 class="font-bold text-sm">Change Password</h3>
+        <button id="pwModalClose" onclick="hideModal('passwordResetModal')" class="text-slate-400 hover:text-slate-600 transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form onsubmit="handlePasswordChange(event)" class="p-6 space-y-4">
+        <div id="pwForceNotice" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed">
+          <strong class="block mb-0.5">Please set your own password</strong>
+          You signed in with a temporary password from the Administrator. Choose a new one that only you know.
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 uppercase mb-1.5 text-xs">New Password</label>
+          <input type="password" id="newPasswordInput" required minlength="6" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs">
+        </div>
+        <button type="submit" class="w-full py-2.5 bg-iiitg-800 text-white font-bold rounded-xl text-sm">Update Password</button>
+      </form>
+    </div>
+  </div>
+
+</body>
+</html>

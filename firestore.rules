@@ -1,0 +1,387 @@
+// ─── CampusCare — Firestore security rules ───
+// Deploy from the Firebase console → Firestore → Rules (test first with the
+// Rules Playground). These rules enforce, at the database level, what the app
+// enforces in its UI — so nobody can bypass the UI from the browser console.
+//
+// Known limitation: a few privileged steps (auto-assignment counters) run on
+// the reporter's browser because the app has no server. The truly airtight fix
+// is to move those into Cloud Functions; the rules below contain the blast
+// radius as much as is possible without a backend. Each such spot is marked.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function email()    { return request.auth.token.email; }
+    function isAdmin()  { return signedIn() && email() in ['admin@iiitg.ac.in']; }
+    // A campus user (student/faculty) must be a VERIFIED GOOGLE account on the
+    // iiitg.ac.in domain — not just any address ending in the suffix. This stops
+    // someone creating an email/password account like fake@iiitg.ac.in and
+    // getting campus rights. (Provisioned staff use isProvisionedCampusReporter,
+    // not this, so their email/password logins are unaffected.)
+    function campus() {
+      return signedIn()
+        && email().matches('.*@iiitg[.]ac[.]in$')
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email_verified == true;
+    }
+    function mine(uid)  { return signedIn() && request.auth.uid == uid; }
+    // keys touched by this write, restricted to an allow-list
+    function touches(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function isStr(v, max) { return v is string && v.size() <= max; }
+    // Standalone follows may add or remove only the caller's own UID. This is
+    // separate from the Me-too counter so watching an issue never inflates it.
+    function changesOwnFollow() {
+      let oldIds = resource.data.get('followerIds', []);
+      let newIds = request.resource.data.get('followerIds', []);
+      let addsSelf = newIds.size() == oldIds.size() + 1
+        && newIds.size() <= 500
+        && newIds.hasAll(oldIds)
+        && request.auth.uid in newIds && !(request.auth.uid in oldIds);
+      let removesSelf = oldIds.size() == newIds.size() + 1
+        && request.auth.uid in oldIds && !(request.auth.uid in newIds)
+        && oldIds.hasAll(newIds);
+      return signedIn() && resource.data.get('isPublic', false) == true
+        && touches(['followerIds']) && request.resource.data.followerIds is list
+        && ((resource.data.get('status','') != 'Resolved' && addsSelf) || removesSelf);
+    }
+    // the technician doc whose login is the current user (1 document read)
+    function isAssignedTech(techId) {
+      return techId != null
+        && exists(/databases/$(database)/documents/technicians/$(techId))
+        && get(/databases/$(database)/documents/technicians/$(techId)).data.uid == request.auth.uid;
+    }
+
+    // Non-teaching accounts are provisioned by the Admin and keyed by Firebase
+    // Auth UID. Legacy accounts converted before the move action was removed
+    // are also accepted through their Admin-set, immutable user profile flag.
+    function isProvisionedCampusReporter(uid) {
+      let memberPath = /databases/$(database)/documents/campus_members/$(uid);
+      let profilePath = /databases/$(database)/documents/users/$(uid);
+      return signedIn() && uid == request.auth.uid
+        && ((exists(memberPath) && get(memberPath).data.get('uid', uid) == uid)
+          || (exists(profilePath)
+            && (get(profilePath).data.get('provisionedStaff', false) == true
+              || get(profilePath).data.get('movedFromStaff', false) == true)));
+    }
+    function canReportCampusIssue() {
+      return signedIn() && (campus() || isProvisionedCampusReporter(request.auth.uid));
+    }
+
+    function ticketTeamMatches(category, dept) {
+      return (category == 'IT' && dept == 'IT & Network Cell')
+        || ((category == 'Electrical' || category == 'Appliances') && dept == 'Electrical Cell')
+        || (category == 'Plumbing' && dept == 'Plumbing & Estate')
+        || (category == 'Hostel' && dept == 'Carpentry & Furniture')
+        || (category == 'Civil' && dept == 'Civil & Building Maintenance')
+        || (category == 'Housekeeping' && dept == 'Housekeeping & Sanitation')
+        || (category == 'Mess' && dept == 'Mess & Food Services')
+        || (category == 'HostelOffice' && dept == 'Hostel Office')
+        || (category == 'Security' && dept == 'Security Office')
+        || (category == 'Medical' && dept == 'Medical Centre')
+        || (category == 'Transport' && dept == 'Transport Section')
+        || (category == 'Lab' && dept == 'Lab Technical Staff')
+        || (category == 'Library' && dept == 'Library')
+        || (category == 'Sports' && dept == 'Sports & Gym')
+        || (category == 'Grounds' && dept == 'Horticulture & Grounds');
+    }
+
+    // The initial auto-assignment runs on the REPORTER's browser (the app has
+    // no server), and on-duty technicians also self-claim this way. This permits
+    // that single write — but ONLY in the exact, safe shape the assigner
+    // produces: an as-yet-unassigned, non-confidential ticket is given to a REAL
+    // technician in the MATCHING team, stamped assignedBy:'auto', left Pending,
+    // with exactly one system message appended. It can change nothing else —
+    // not status, not resolution. (A Cloud Function removes the need for this
+    // browser-side write entirely; see functions/autoAssignOnCreate.)
+    function validAutoAssign(techId) {
+      let techPath = /databases/$(database)/documents/technicians/$(techId);
+      let oldMessages = resource.data.get('messages', []);
+      let newMessages = request.resource.data.get('messages', []);
+      return signedIn()
+        && techId != null
+        && exists(techPath)
+        && resource.data.get('status', '') == 'Pending'
+        && resource.data.get('assignedTo', null) == null
+        && resource.data.get('confidential', false) != true
+        && ticketTeamMatches(resource.data.get('category', ''), get(techPath).data.get('dept', ''))
+        && request.resource.data.get('status', '') == 'Pending'
+        && request.resource.data.get('assignedTo', null) == techId
+        && request.resource.data.get('assignedToName', null) == get(techPath).data.get('name', null)
+        && request.resource.data.get('assignedToEmail', null) == get(techPath).data.get('email', null)
+        && request.resource.data.get('assignedBy', '') == 'auto'
+        && request.resource.data.get('assignedAt', null) is number
+        && request.resource.data.get('assignReason', null) is string
+        && touches(['assignedTo', 'assignedToName', 'assignedToEmail', 'assignedAt', 'assignedBy', 'assignReason', 'acknowledgedAt', 'messages'])
+        && newMessages is list
+        && newMessages.size() == oldMessages.size() + 1
+        && newMessages.hasAll(oldMessages)
+        && newMessages[newMessages.size() - 1].get('isSystem', false) == true;
+    }
+
+    // The REPORTER may only run their own workflow: chat, rate, respond to a
+    // visit proposal, and reopen a fixed ticket. They may move status only back
+    // to 'Pending' (reopen) — never mark their own ticket In Progress/Resolved.
+    function reporterTicketUpdate() {
+      return (mine(resource.data.get('userId', '')) || resource.data.get('userEmail', '') == email())
+        && touches(['messages', 'rating', 'feedbackAt', 'appointment', 'appointmentHistory',
+            'status', 'acknowledgedAt', 'resolvedAt', 'resolvedAtMs',
+            'reopenCount', 'reopenedAt', 'reopenHistory',
+            'assignedAt', 'assignedTo', 'assignedToName', 'assignedToEmail'])
+        && (request.resource.data.get('status', '') == resource.data.get('status', '')
+            || request.resource.data.get('status', '') == 'Pending');
+    }
+    // The ASSIGNED TECHNICIAN may acknowledge (→ In Progress), resolve
+    // (→ Resolved), propose a visit, and chat. They may move status only to
+    // 'In Progress' or 'Resolved' — never silently back to Pending.
+    function techTicketUpdate() {
+      return (isAssignedTech(resource.data.get('assignedTo', null)) || resource.data.get('assignedToEmail', null) == email())
+        && touches(['messages', 'status', 'acknowledgedAt',
+            'assignedTo', 'assignedToName', 'assignedAt', 'assignedToEmail',
+            'resolvedAt', 'resolvedAtMs', 'resolvedBy', 'resolvedByName',
+            'resolutionRemarks', 'materialsUsed', 'materialsLog', 'resolutionPhotoUrl',
+            'appointment', 'appointmentHistory'])
+        && (request.resource.data.get('status', '') == resource.data.get('status', '')
+            || request.resource.data.get('status', '') == 'In Progress'
+            || request.resource.data.get('status', '') == 'Resolved');
+    }
+    // A community member who is NOT the reporter may only press "Me too":
+    // add themselves + bump the count by exactly one (auto-urgent at 5).
+    function meTooUpdate() {
+      return signedIn()
+        && resource.data.get('isPublic', false) == true
+        && resource.data.get('userId', '') != request.auth.uid
+        && touches(['upvotes', 'upvotedBy', 'followers', 'priority'])
+        && request.resource.data.upvotes == resource.data.upvotes + 1
+        && (request.auth.uid in request.resource.data.upvotedBy)
+        && !(request.auth.uid in resource.data.upvotedBy)
+        && (request.resource.data.priority == resource.data.priority
+            || (request.resource.data.priority == 'High' && request.resource.data.upvotes >= 5));
+    }
+
+    // ── staff_credentials ── status only; passwords are NEVER stored here now.
+    match /staff_credentials/{techId} {
+      allow read:          if isAdmin();
+      allow create, delete: if isAdmin();
+      // A technician/member may ONLY clear the temp flag on their OWN entry
+      // (first password change) — nothing else. They cannot touch another
+      // entry (the existing email must already be theirs), cannot re-flag
+      // temp=true, and cannot change any other field.
+      allow update: if isAdmin()
+        || (signedIn()
+            && resource.data.email == email()
+            && request.resource.data.email == email()
+            && request.resource.data.get('temp', false) == false
+            && touches(['email', 'temp', 'updatedAt']));
+    }
+
+    // ── users ── a person reads/writes only their own profile (admin reads all).
+    // The Admin provisions non-teaching accounts and owns their access flags.
+    match /users/{uid} {
+      allow read:           if isAdmin() || mine(uid);
+      // Only Admin-created profiles may carry the flags that grant a
+      // non-teaching account its provisioned reporter access.
+      allow create: if request.resource.data.uid == uid
+        && (isAdmin() || (mine(uid) && !request.resource.data.keys().hasAny(['provisionedStaff', 'movedFromStaff'])));
+      allow update: if request.resource.data.uid == uid
+        && (isAdmin() || (mine(uid)
+          && request.resource.data.get('provisionedStaff', false) == resource.data.get('provisionedStaff', false)
+          && request.resource.data.get('movedFromStaff', false) == resource.data.get('movedFromStaff', false)));
+      allow delete:         if false;
+    }
+
+    // ── admin-only configuration & notices (everyone signed-in may read) ──
+    match /settings/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /notices/{id}  { allow read: if signedIn(); allow write: if isAdmin(); }
+
+    // ── tickets ── the normal / public collection.
+    // Readable by any signed-in campus user, because "Me too" has to find
+    // other people's open public tickets.
+    match /tickets/{id} {
+      // Scoped reads: admin sees all; a reporter sees their own; anyone may read
+      // PUBLIC (community) tickets for "Me too"; a technician sees what's assigned
+      // to them. A student can no longer read another student's private ticket.
+      allow read: if isAdmin()
+        || mine(resource.data.userId)
+        || (signedIn() && resource.data.isPublic == true)
+        || (signedIn() && resource.data.assignedToEmail == email());
+      // Create: the reporter is the caller, the ticket starts unassigned and
+      // Pending (status + assignment are server-controlled, not client-chosen),
+      // the "me too" counter can't start inflated, and the main fields are
+      // type/length checked. The allow-list rejects any stray/injected field —
+      // if you add a new field to the report form, add it here too.
+      allow create: if canReportCampusIssue()
+        && request.resource.data.userId == request.auth.uid              // can't spoof the reporter
+        && request.resource.data.get('userEmail', '') == email()
+        && request.resource.data.confidential != true                    // confidential goes elsewhere
+        && request.resource.data.status == 'Pending'                     // no self-resolved tickets
+        && request.resource.data.get('assignedTo', null) == null         // server/queue assigns, not the reporter
+        && request.resource.data.get('assignedToEmail', null) == null
+        && request.resource.data.get('assignedBy', null) == null
+        && request.resource.data.get('resolvedBy', null) == null
+        && request.resource.data.get('rating', null) == null
+        && request.resource.data.upvotes is number
+        && request.resource.data.upvotes <= 1
+        && request.resource.data.get('upvotedBy', []).size() <= 1
+        && isStr(request.resource.data.category, 60)
+        && isStr(request.resource.data.get('subCategory', ''), 120)
+        && isStr(request.resource.data.get('description', ''), 5000)
+        && isStr(request.resource.data.get('location', ''), 300)
+        && isStr(request.resource.data.get('phone', ''), 40)
+        && request.resource.data.messages is list
+        && request.resource.data.messages.size() <= 5
+        && request.resource.data.keys().hasOnly([
+            'category', 'subCategory', 'categoryDisplay', 'customIssue',
+            'placeType', 'placeTypeLabel', 'location', 'description', 'phone',
+            'priority', 'isPublic', 'upvotes', 'upvotedBy', 'availabilityWindows',
+            'lat', 'lng', 'pinSource', 'photoUrl', 'confidential',
+            'userEmail', 'userName', 'userId', 'reporterType', 'reporterDept',
+            'id', 'date', 'status', 'assignedTo', 'assignedToName', 'assignedToEmail',
+            'assignedAt', 'assignedBy', 'assignReason', 'followers', 'followerIds',
+            'appointment', 'appointmentHistory', 'messages', 'createdAt']);
+      // Edit: the Admin is unrestricted. Everyone else is scoped to exactly the
+      // fields their own workflow touches (see the functions above), so a
+      // reporter can't mark their ticket resolved and a technician can't rewrite
+      // someone else's report. The old "change any field" branch is gone.
+      allow update: if isAdmin()
+        || reporterTicketUpdate()
+        || techTicketUpdate()
+        || (request.resource.data.get('assignedTo', null) != null && validAutoAssign(request.resource.data.get('assignedTo', null)))
+        || meTooUpdate()
+        || changesOwnFollow();
+      allow delete: if isAdmin();
+    }
+
+    // ── confidential_tickets ── harassment / ragging and the like.
+    // ONLY the Administrator and the reporter. Never the whole collection to
+    // anyone else — this is what keeps a grievance private at the database
+    // level, not just in the UI.
+    match /confidential_tickets/{id} {
+      allow read: if isAdmin() || mine(resource.data.userId);
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.confidential == true
+        && request.resource.data.status == 'Pending'
+        && request.resource.data.get('assignedTo', null) == null
+        && isStr(request.resource.data.get('description', ''), 5000);
+      // The reporter may add messages / rate / respond / reopen, but can NEVER
+      // hand the grievance to another account (userId is immutable), un-hide it,
+      // or back-date it. The Admin branch is unrestricted.
+      allow update: if isAdmin()
+        || (mine(resource.data.userId)
+            && request.resource.data.userId == resource.data.userId
+            && request.resource.data.get('confidential', false) == resource.data.get('confidential', false)
+            && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null)
+            && touches(['messages', 'rating', 'feedbackAt', 'appointment', 'appointmentHistory',
+                'status', 'acknowledgedAt', 'resolvedAt', 'resolvedAtMs',
+                'reopenCount', 'reopenedAt', 'reopenHistory'])
+            && (request.resource.data.get('status', '') == resource.data.get('status', '')
+                || request.resource.data.get('status', '') == 'Pending'));
+      allow delete: if isAdmin();
+    }
+
+    // ── technicians ── the admin manages these records.
+    // Scoped read: only the admin (for assignment) and the technician on their
+    // OWN record. Campus users get the assignee's name from the ticket itself,
+    // so they don't need — and can't read — the whole technician directory.
+    match /technicians/{id} {
+      allow read: if isAdmin() || (signedIn() && (resource.data.uid == request.auth.uid || resource.data.email == email()));
+      allow create, delete: if isAdmin();
+      // Only the admin, or the technician on their OWN record, may change a
+      // technician doc — and only their status / load / photo / reset stamp.
+      allow update: if isAdmin()
+        || (signedIn() && resource.data.uid == request.auth.uid
+            && touches(['status', 'activeTasks', 'photoUrl', 'lastPasswordReset']));
+    }
+
+    // ── admin_messages ── private threads between a user and the Administrator.
+    // A thread belongs to one user (senderId). Hardened so a user cannot forge
+    // an admin reply or re-point a thread at another user.
+    match /admin_messages/{id} {
+      allow read:   if isAdmin() || mine(resource.data.senderId);
+      // A user may open their OWN thread only: it must be attributed to them,
+      // start with NO replies (so no fake admin reply can be planted at
+      // creation), and must not claim to be admin-initiated. The Admin branch
+      // (adminStart) is unrestricted.
+      allow create: if isAdmin()
+        || (mine(request.resource.data.senderId)
+            && request.resource.data.get('senderEmail', '') == email()
+            && request.resource.data.get('initiatedByAdmin', false) == false
+            && request.resource.data.get('replies', []).size() == 0
+            && isStr(request.resource.data.get('text', ''), 5000));
+      // A user may only append ONE reply of their own (from == 'user') or toggle
+      // their read flags. They can never change senderId / senderEmail /
+      // initiatedByAdmin, and can never add an admin-attributed reply.
+      allow update: if isAdmin()
+        || (mine(resource.data.senderId)
+            && request.resource.data.senderId == resource.data.senderId
+            && request.resource.data.get('senderEmail', '') == resource.data.get('senderEmail', '')
+            && request.resource.data.get('initiatedByAdmin', false) == resource.data.get('initiatedByAdmin', false)
+            && touches(['replies', 'lastActivity', 'isRead', 'userUnread'])
+            && (
+                 // just toggling read flags — replies unchanged
+                 (request.resource.data.get('replies', []).size() == resource.data.get('replies', []).size()
+                  && request.resource.data.get('replies', []).hasAll(resource.data.get('replies', []))
+                  && resource.data.get('replies', []).hasAll(request.resource.data.get('replies', [])))
+                 // or appending exactly one reply, authored as the user
+                 || (request.resource.data.get('replies', []).size() == resource.data.get('replies', []).size() + 1
+                     && request.resource.data.replies.hasAll(resource.data.get('replies', []))
+                     && request.resource.data.replies[request.resource.data.replies.size() - 1].get('from', '') == 'user')
+               ));
+      allow delete: if isAdmin();
+    }
+
+    // ── audit_log ── append-only history. Anyone signed-in may add an entry
+    // (actions happen on their own browser); only the admin may read it; nobody
+    // may edit or delete, so the record can't be tampered with.
+    match /audit_log/{id} {
+      allow read:   if isAdmin();
+      // An entry must be attributed to the caller — you can't forge an audit
+      // entry in someone else's (or the Admin's) name — and is field/length
+      // constrained to curb log spam. (Self-attributed spam is still possible
+      // without a backend; move logging to a Cloud Function to close it fully.)
+      allow create: if signedIn()
+        && request.resource.data.actorEmail == email()
+        && request.resource.data.keys().hasOnly(['action', 'summary', 'actorEmail', 'actorName', 'ticketId', 'at', 'ts'])
+        && isStr(request.resource.data.get('action', ''), 60)
+        && isStr(request.resource.data.get('summary', ''), 500)
+        && isStr(request.resource.data.get('actorName', ''), 120);
+      allow update, delete: if false;
+    }
+
+    // ── campus_members ── non-teaching staff who only report. Admin-managed,
+    // keyed by the member's login uid so they can read their own record.
+    match /campus_members/{uid} {
+      allow read:           if isAdmin() || mine(uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── staff_phone_index ── phone number → login email, so staff can sign in
+    // by phone. It MUST be readable before sign-in (that's the whole point), so
+    // a single GET is open; only the admin may write it, and the write is
+    // constrained to ONLY the login email + timestamp — never a role, uid, or
+    // any other personal field. So a known phone number reveals at most the
+    // login email (the same address a password-reset screen would confirm).
+    match /staff_phone_index/{phone} {
+      // GET a single entry by its exact phone (needed to resolve phone→email at
+      // sign-in), but NOT list/enumerate the whole collection.
+      allow get:  if true;
+      allow list: if false;
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['email', 'updatedAt'])
+        && request.resource.data.email is string;
+      allow delete: if isAdmin();
+    }
+
+    // ── profile_requests ── a technician asks to change their OWN photo; admin
+    // decides. A request may only be created for the technician record whose
+    // login is the caller — nobody can file a photo change for someone else.
+    match /profile_requests/{id} {
+      allow read:   if isAdmin();
+      allow create: if signedIn()
+        && exists(/databases/$(database)/documents/technicians/$(request.resource.data.techId))
+        && get(/databases/$(database)/documents/technicians/$(request.resource.data.techId)).data.uid == request.auth.uid
+        && isStr(request.resource.data.get('photoUrl', ''), 2000);
+      allow update, delete: if isAdmin();
+    }
+  }
+}

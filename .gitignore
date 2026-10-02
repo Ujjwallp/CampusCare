@@ -1,0 +1,49 @@
+# ───────── Dependencies ─────────
+node_modules/
+functions/node_modules/
+
+# ───────── Secrets / environment ─────────
+# Never commit API secrets, service-account keys, or env files.
+.env
+.env.*
+*.key
+*.pem
+serviceAccount*.json
+service-account*.json
+
+# ───────── Firebase local / debug ─────────
+.firebase/
+firebase-debug.log
+firestore-debug.log
+database-debug.log
+ui-debug.log
+*.log
+
+# ───────── OS / editor junk ─────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ───────── IDE / tooling ─────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ───────── Python (local dev server helpers) ─────────
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# ───────── Build / temp ─────────
+dist/
+build/
+*.tmp
+run_server_*.py

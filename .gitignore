@@ -79,3 +79,8 @@ Desktop.ini
 # IDE settings
 .vscode/
 .idea/
+
+# Firebase CLI deployment metadata and rules are managed separately from Vercel.
+# Keep local copies; deploy Firestore rules through the Firebase Console/CLI.
+.firebaserc
+firestore.rules
